@@ -1,0 +1,187 @@
+.state-node {
+  position: relative;
+  width: 68px;
+  height: 68px;
+}
+
+/* Decorative connect affordance shown on hover, centered on the same spot
+   as the actual (invisible) Handle hotspots — see leftHandleStyle /
+   rightHandleStyle in StateNode.tsx. Everywhere else on the node body
+   drags the state instead of starting a connection. */
+.state-node::before,
+.state-node::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  transform: translateY(-50%) scale(0.4);
+  opacity: 0;
+  transition: opacity 120ms ease, transform 120ms ease;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.state-node::before {
+  left: -5px;
+}
+
+.state-node::after {
+  right: -5px;
+}
+
+.state-node:hover::before,
+.state-node:hover::after {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+.state-node__circle {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  border: 2.5px solid var(--border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-md);
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+  cursor: grab;
+}
+
+.state-node.is-accept .state-node__circle {
+  border-color: var(--accept);
+  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--accept), var(--shadow-md);
+}
+
+.state-node.is-start .state-node__circle {
+  border-color: var(--start);
+}
+
+.state-node.is-start.is-accept .state-node__circle {
+  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--accept), var(--shadow-md);
+  border-color: var(--start);
+}
+
+.state-node.has-error .state-node__circle {
+  border-color: var(--error);
+}
+
+.state-node.is-active .state-node__circle {
+  border-color: var(--active);
+  box-shadow: 0 0 0 6px var(--active-soft), var(--shadow-md);
+  transform: scale(1.08);
+}
+
+.state-node.is-selected .state-node__circle {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+}
+
+.state-node__label {
+  font-size: var(--fs-3);
+  font-weight: 600;
+  color: var(--text);
+  pointer-events: none;
+  user-select: none;
+}
+
+.state-node__input {
+  width: 44px;
+  text-align: center;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  font-size: var(--fs-2);
+  padding: 2px 0;
+}
+
+.state-node__start-arrow {
+  position: absolute;
+  left: -24px;
+  top: 50%;
+  width: 20px;
+  height: 2.5px;
+  background: var(--start);
+  transform: translateY(-50%);
+}
+
+.state-node__start-arrow::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: 50%;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 7px solid var(--start);
+  transform: translateY(-50%);
+}
+
+.state-node .react-flow__handle {
+  cursor: crosshair;
+}
+
+.state-node__toolbar {
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  opacity: 0;
+  pointer-events: none;
+  /* Grace period before hiding: the toolbar sits just above the node with a
+     small gap, so a slightly diagonal mouse move off the circle would
+     otherwise drop :hover instantly and make the buttons hard to reach. */
+  transition: opacity 200ms ease 200ms, pointer-events 0s linear 200ms;
+  box-shadow: var(--shadow-md);
+  white-space: nowrap;
+}
+
+.state-node:hover .state-node__toolbar,
+.state-node.is-selected .state-node__toolbar {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 100ms ease;
+}
+
+/* While a transition is being dragged, hovering the receiving node should
+   just show it as a drop target — not pop up its action toolbar. */
+.state-node.is-connect-dragging .state-node__toolbar {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: none !important;
+}
+
+.state-node__toolbar button {
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.state-node__toolbar button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.state-node__toolbar button.danger:hover {
+  background: var(--error-soft);
+  color: var(--error);
+}
