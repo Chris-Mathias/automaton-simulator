@@ -1,0 +1,135 @@
+:root {
+  color-scheme: dark;
+  --font-ui: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --bg: #0d0f14;
+  --bg-elevated: #151821;
+  --bg-panel: #191c26;
+  --bg-hover: #232733;
+  --border: #2a2f3d;
+  --border-strong: #3a4054;
+  --text: #e8eaf0;
+  --text-dim: #98a0b3;
+  --text-faint: #656d80;
+
+  /* Ghost-UI tokens: fields/dividers read from these instead of --border,
+     so the chrome stays borderless while the canvas keeps its own look. */
+  --field-fill: rgba(255, 255, 255, 0.05);
+  --field-fill-hover: rgba(255, 255, 255, 0.08);
+  --divider-soft: rgba(255, 255, 255, 0.07);
+
+  --accent: #5eead4;
+  --accent-strong: #2dd4bf;
+  --accent-soft: rgba(94, 234, 212, 0.14);
+
+  --start: #fbbf24;
+  --accept: #34d399;
+  --active: #f472b6;
+  --active-soft: rgba(244, 114, 182, 0.16);
+  --error: #f87171;
+  --error-soft: rgba(248, 113, 113, 0.12);
+  --warning: #fbbf24;
+  --warning-soft: rgba(251, 191, 36, 0.12);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
+
+  /* Typographic scale. Text only — icon glyph sizes (.msy) are set
+     independently and don't follow this scale. */
+  --fs-1: 12px;
+  --fs-2: 13px;
+  --fs-3: 14px;
+  --fs-4: 15px;
+  --fs-5: 17px;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f5f6f9;
+  --bg-elevated: #ffffff;
+  --bg-panel: #ffffff;
+  --bg-hover: #eef0f5;
+  --border: #dde1ea;
+  --border-strong: #c5cad6;
+  --text: #171a21;
+  --text-dim: #5b6272;
+  --text-faint: #8b91a1;
+
+  --field-fill: rgba(15, 23, 42, 0.05);
+  --field-fill-hover: rgba(15, 23, 42, 0.09);
+  --divider-soft: rgba(15, 23, 42, 0.08);
+
+  --accent: #0d9488;
+  --accent-strong: #0f766e;
+  --accent-soft: rgba(13, 148, 136, 0.1);
+
+  --active-soft: rgba(219, 39, 119, 0.1);
+  --error-soft: rgba(220, 38, 38, 0.08);
+  --warning-soft: rgba(217, 119, 6, 0.1);
+  --shadow-md: 0 8px 24px rgba(20, 24, 34, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-3);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+input,
+select {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-faint);
+  opacity: 1;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.msy {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
