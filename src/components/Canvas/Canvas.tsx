@@ -1,0 +1,422 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ReactFlow,
+  ReactFlowProvider,
+  Background,
+  BackgroundVariant,
+  Controls,
+  MiniMap,
+  MarkerType,
+  ConnectionMode,
+  useNodesState,
+  useEdgesState,
+  useReactFlow,
+  type Connection,
+  type OnNodeDrag,
+  type OnConnect,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+import { activeDocument, useAutomatonStore } from '../../store/useAutomatonStore';
+import { validate } from '../../engine/validate';
+import { StateNode, type StateNodeType } from './StateNode';
+import { TransitionEdge, type TransitionEdgeType } from './TransitionEdge';
+import { NODE_DIAMETER } from './floatingEdge';
+import { TransitionDialog, type TransitionDraft } from '../Dialogs/TransitionDialog';
+import { EditTransitionsDialog } from '../Dialogs/EditTransitionsDialog';
+import { EPSILON, type Transition } from '../../types/automaton';
+import './Canvas.css';
+
+const nodeTypes = { stateNode: StateNode };
+const edgeTypes = { transitionEdge: TransitionEdge };
+
+/** Typed aliases for the epsilon transition, since ε isn't on most keyboards. */
+const EPSILON_ALIASES = new Set(['eps', 'epsilon', 'vazio']);
+
+function normalizeSymbol(raw: string): string {
+  return EPSILON_ALIASES.has(raw.toLowerCase()) ? EPSILON : raw;
+}
+
+function formatLabel(kind: string, t: Transition) {
+  if (kind !== 'PDA') return t.input;
+  const popLabel = t.pop || 'ε';
+  const pushLabel = t.push || 'ε';
+  return `${t.input}, ${popLabel}→${pushLabel}`;
+}
+
+/**
+ * Single source of truth for an edge's color, shared between the visible
+ * path and its arrowhead marker (a separate SVG `<marker>` def that doesn't
+ * automatically track the path's own color/hover state).
+ */
+function edgeColor({
+  isArmed,
+  isHovered,
+  isActive,
+  hasError,
+}: {
+  isArmed: boolean;
+  isHovered: boolean;
+  isActive: boolean;
+  hasError: boolean;
+}): string {
+  if (isArmed) return 'var(--error)';
+  if (isHovered) return 'var(--accent)';
+  if (isActive) return 'var(--active)';
+  if (hasError) return 'var(--error)';
+  return 'var(--border-strong)';
+}
+
+function CanvasInner() {
+  const automaton = useAutomatonStore((s) => activeDocument(s).automaton);
+  const addState = useAutomatonStore((s) => s.addState);
+  const updateStatePosition = useAutomatonStore((s) => s.updateStatePosition);
+  const renameState = useAutomatonStore((s) => s.renameState);
+  const toggleAccept = useAutomatonStore((s) => s.toggleAccept);
+  const setStart = useAutomatonStore((s) => s.setStart);
+  const removeState = useAutomatonStore((s) => s.removeState);
+  const addTransition = useAutomatonStore((s) => s.addTransition);
+  const updateTransition = useAutomatonStore((s) => s.updateTransition);
+  const removeTransition = useAutomatonStore((s) => s.removeTransition);
+  const setAlphabet = useAutomatonStore((s) => s.setAlphabet);
+  const simulationResult = useAutomatonStore((s) => activeDocument(s).simulationResult);
+  const simulationStepIndex = useAutomatonStore((s) => activeDocument(s).simulationStepIndex);
+
+  const { screenToFlowPosition, fitView } = useReactFlow();
+  const [pendingConnection, setPendingConnection] = useState<Connection | null>(null);
+  const [editingEdgeKey, setEditingEdgeKey] = useState<string | null>(null);
+  const [autoFocusKey, setAutoFocusKey] = useState<string | null>(null);
+  const [draftEdge, setDraftEdge] = useState<{ source: string; target: string } | null>(null);
+  /** Clicking a transition once arms it (red); clicking it again deletes it. */
+  const [armedEdgeKey, setArmedEdgeKey] = useState<string | null>(null);
+  const [hoveredEdgeKey, setHoveredEdgeKey] = useState<string | null>(null);
+
+  const activeStateIds = useMemo(() => {
+    if (!simulationResult) return new Set<string>();
+    const step = simulationResult.steps[simulationStepIndex];
+    return new Set(step?.branches.map((b) => b.stateId) ?? []);
+  }, [simulationResult, simulationStepIndex]);
+
+  const activeTransitionIds = useMemo(() => {
+    if (!simulationResult) return new Set<string>();
+    const step = simulationResult.steps[simulationStepIndex];
+    return new Set(step?.branches.flatMap((b) => b.viaTransitionIds) ?? []);
+  }, [simulationResult, simulationStepIndex]);
+
+  const issues = useMemo(() => validate(automaton), [automaton]);
+  const errorStateIds = useMemo(
+    () => new Set(issues.filter((i) => i.severity === 'error' && i.stateId).map((i) => i.stateId!)),
+    [issues],
+  );
+  const errorTransitionIds = useMemo(
+    () => new Set(issues.filter((i) => i.severity === 'error' && i.transitionId).map((i) => i.transitionId!)),
+    [issues],
+  );
+
+  const storeNodes = useMemo<StateNodeType[]>(
+    () =>
+      automaton.states.map((s) => ({
+        id: s.id,
+        type: 'stateNode',
+        position: s.position,
+        data: {
+          label: s.label,
+          isStart: s.isStart,
+          isAccept: s.isAccept,
+          isActive: activeStateIds.has(s.id),
+          hasError: errorStateIds.has(s.id),
+          onRename: renameState,
+          onToggleAccept: toggleAccept,
+          onSetStart: setStart,
+          onDelete: removeState,
+        },
+      })),
+    [automaton.states, activeStateIds, errorStateIds, renameState, toggleAccept, setStart, removeState],
+  );
+
+  const handleCommitSymbols = useCallback(
+    (from: string, to: string, csv: string) => {
+      const symbols = [
+        ...new Set(
+          csv
+            .split(',')
+            .map((s) => normalizeSymbol(s.trim()))
+            .filter(Boolean),
+        ),
+      ].sort();
+      const existing = automaton.transitions.filter((t) => t.from === from && t.to === to);
+      for (const t of existing) {
+        if (!symbols.includes(t.input)) removeTransition(t.id);
+      }
+      const existingInputs = new Set(existing.map((t) => t.input));
+      for (const symbol of symbols) {
+        if (!existingInputs.has(symbol)) addTransition({ from, to, input: symbol });
+      }
+
+      // Keep the declared alphabet in sync with what's actually typed, so a
+      // symbol used on the canvas is never silently dropped by AFN→AFD
+      // conversion (which only iterates the declared alphabet).
+      const newSymbols = symbols.filter((s) => s !== EPSILON && !automaton.alphabet.includes(s));
+      if (newSymbols.length > 0) setAlphabet([...automaton.alphabet, ...newSymbols].sort());
+
+      setAutoFocusKey(null);
+    },
+    [automaton.transitions, automaton.alphabet, addTransition, removeTransition, setAlphabet],
+  );
+
+  const storeEdges = useMemo<TransitionEdgeType[]>(() => {
+    const groups = new Map<string, Transition[]>();
+    for (const t of automaton.transitions) {
+      const key = `${t.from}=>${t.to}`;
+      const list = groups.get(key) ?? [];
+      list.push(t);
+      groups.set(key, list);
+    }
+    const editable = automaton.kind !== 'PDA';
+    const result: TransitionEdgeType[] = [...groups.entries()].map(([key, unsortedTransitions]) => {
+      const transitions = [...unsortedTransitions].sort((a, b) => a.input.localeCompare(b.input));
+      const from = transitions[0].from;
+      const to = transitions[0].to;
+      const isActive = transitions.some((t) => activeTransitionIds.has(t.id));
+      const hasError = transitions.some((t) => errorTransitionIds.has(t.id));
+      const isArmed = key === armedEdgeKey;
+      const isHovered = key === hoveredEdgeKey;
+      const color = edgeColor({ isArmed, isHovered, isActive, hasError });
+      return {
+        id: key,
+        source: from,
+        target: to,
+        type: 'transitionEdge',
+        markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
+        data: {
+          label: transitions.map((t) => formatLabel(automaton.kind, t)).join(', '),
+          color,
+          isActive,
+          isArmed,
+          transitionIds: transitions.map((t) => t.id),
+          editable,
+          symbolsCsv: transitions.map((t) => t.input).join(','),
+          autoFocus: editable && key === autoFocusKey,
+          onCommitSymbols: editable ? (csv: string) => handleCommitSymbols(from, to, csv) : undefined,
+        },
+      };
+    });
+
+    // A freshly dragged connection with no symbols yet: renders as an empty,
+    // editable label with no underlying transitions until something is typed.
+    if (draftEdge && !groups.has(`${draftEdge.source}=>${draftEdge.target}`)) {
+      result.push({
+        id: `${draftEdge.source}=>${draftEdge.target}`,
+        source: draftEdge.source,
+        target: draftEdge.target,
+        type: 'transitionEdge',
+        markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--border-strong)', width: 16, height: 16 },
+        data: {
+          label: '',
+          color: 'var(--border-strong)',
+          isActive: false,
+          isArmed: false,
+          transitionIds: [],
+          editable: true,
+          symbolsCsv: '',
+          autoFocus: true,
+          onCommitSymbols: (csv: string) => {
+            handleCommitSymbols(draftEdge.source, draftEdge.target, csv);
+            setDraftEdge(null);
+          },
+          onCancel: () => setDraftEdge(null),
+        },
+      });
+    }
+
+    return result;
+  }, [
+    automaton.transitions,
+    automaton.kind,
+    activeTransitionIds,
+    errorTransitionIds,
+    autoFocusKey,
+    handleCommitSymbols,
+    draftEdge,
+    armedEdgeKey,
+    hoveredEdgeKey,
+  ]);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(storeNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(storeEdges);
+
+  useEffect(() => setNodes(storeNodes), [storeNodes, setNodes]);
+  useEffect(() => setEdges(storeEdges), [storeEdges, setEdges]);
+
+  // Re-frame the view when switching to a different automaton tab, since its
+  // states can live anywhere on the (shared, unbounded) canvas coordinate space.
+  useEffect(() => {
+    fitView({ padding: 0.35, maxZoom: 1, duration: 300 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [automaton.id]);
+
+  const handlePaneDoubleClick = useCallback(
+    (event: React.MouseEvent) => {
+      // Only create a state when the background itself was double-clicked,
+      // not a node/edge/label bubbling up through it.
+      const target = event.target as HTMLElement;
+      if (!target.classList.contains('react-flow__pane')) return;
+      const flowPos = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      addState({ x: flowPos.x - NODE_DIAMETER / 2, y: flowPos.y - NODE_DIAMETER / 2 });
+    },
+    [addState, screenToFlowPosition],
+  );
+
+  const handleNodeDragStop: OnNodeDrag<StateNodeType> = useCallback(
+    (_event, node) => updateStatePosition(node.id, node.position),
+    [updateStatePosition],
+  );
+
+  const handleConnect: OnConnect = useCallback(
+    (connection) => {
+      if (!connection.source || !connection.target) return;
+      if (automaton.kind === 'PDA') {
+        setPendingConnection(connection);
+        return;
+      }
+      const alreadyExists = automaton.transitions.some(
+        (t) => t.from === connection.source && t.to === connection.target,
+      );
+      if (alreadyExists) {
+        setAutoFocusKey(`${connection.source}=>${connection.target}`);
+      } else {
+        setDraftEdge({ source: connection.source, target: connection.target });
+      }
+    },
+    [automaton.kind, automaton.transitions],
+  );
+
+  const handleTransitionSubmit = (draft: TransitionDraft) => {
+    if (!pendingConnection?.source || !pendingConnection.target) return;
+    addTransition({ from: pendingConnection.source, to: pendingConnection.target, ...draft });
+    setPendingConnection(null);
+  };
+
+  const handleEdgesDelete = useCallback(
+    (deleted: TransitionEdgeType[]) => {
+      for (const edge of deleted) {
+        const ids = (edge.data?.transitionIds as string[] | undefined) ?? [];
+        for (const id of ids) removeTransition(id);
+      }
+    },
+    [removeTransition],
+  );
+
+  const handleNodesDelete = useCallback(
+    (deleted: StateNodeType[]) => {
+      for (const node of deleted) removeState(node.id);
+    },
+    [removeState],
+  );
+
+  const stateById = useMemo(() => new Map(automaton.states.map((s) => [s.id, s])), [automaton.states]);
+
+  const handleEdgeClick = useCallback(
+    (_event: React.MouseEvent, edge: TransitionEdgeType) => {
+      // PDA transitions (which need pop/push fields) always open the modal.
+      if (automaton.kind === 'PDA') {
+        setEditingEdgeKey(edge.id);
+        return;
+      }
+      // DFA/NFA: clicking the line (not the label, which edits symbols
+      // inline) arms it for deletion; clicking the same, already-armed line
+      // again deletes it. Undo (Ctrl+Z) covers accidental deletes.
+      if (armedEdgeKey === edge.id) {
+        const ids = (edge.data?.transitionIds as string[] | undefined) ?? [];
+        for (const id of ids) removeTransition(id);
+        setArmedEdgeKey(null);
+      } else {
+        setArmedEdgeKey(edge.id);
+      }
+    },
+    [automaton.kind, armedEdgeKey, removeTransition],
+  );
+
+  const editingTransitions = useMemo(
+    () => (editingEdgeKey ? automaton.transitions.filter((t) => `${t.from}=>${t.to}` === editingEdgeKey) : []),
+    [automaton.transitions, editingEdgeKey],
+  );
+
+  return (
+    <div className="canvas-wrap">
+      {automaton.states.length === 0 && (
+        <div className="canvas-hint">Dê um duplo clique em qualquer lugar do canvas para criar o primeiro estado.</div>
+      )}
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeDragStop={handleNodeDragStop}
+        onPaneClick={() => {
+          setEditingEdgeKey(null);
+          setArmedEdgeKey(null);
+        }}
+        onDoubleClick={handlePaneDoubleClick}
+        onConnect={handleConnect}
+        onEdgeClick={handleEdgeClick}
+        onEdgeMouseEnter={(_event, edge) => setHoveredEdgeKey(edge.id)}
+        onEdgeMouseLeave={() => setHoveredEdgeKey(null)}
+        onEdgesDelete={handleEdgesDelete}
+        onNodesDelete={handleNodesDelete}
+        deleteKeyCode={['Backspace', 'Delete']}
+        connectionMode={ConnectionMode.Loose}
+        // Covers the whole node circle (radius ~34px, ~48px to a far corner)
+        // so a transition can be dropped anywhere on the receiving node, not
+        // just on its small left/right connect handles.
+        connectionRadius={55}
+        zoomOnDoubleClick={false}
+        fitView
+        fitViewOptions={{ padding: 0.35, maxZoom: 1 }}
+        minZoom={0.3}
+        maxZoom={2}
+        proOptions={{ hideAttribution: true }}
+      >
+        <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="var(--border)" />
+        <Controls showInteractive={false} />
+        <MiniMap pannable zoomable className="canvas-minimap" />
+      </ReactFlow>
+
+      {pendingConnection?.source && pendingConnection.target && (
+        <TransitionDialog
+          kind={automaton.kind}
+          alphabet={automaton.alphabet}
+          stackAlphabet={automaton.stackAlphabet}
+          fromLabel={stateById.get(pendingConnection.source)?.label ?? pendingConnection.source}
+          toLabel={stateById.get(pendingConnection.target)?.label ?? pendingConnection.target}
+          onSubmit={handleTransitionSubmit}
+          onClose={() => setPendingConnection(null)}
+        />
+      )}
+
+      {editingTransitions.length > 0 && (
+        <EditTransitionsDialog
+          kind={automaton.kind}
+          alphabet={automaton.alphabet}
+          stackAlphabet={automaton.stackAlphabet}
+          fromLabel={stateById.get(editingTransitions[0].from)?.label ?? editingTransitions[0].from}
+          toLabel={stateById.get(editingTransitions[0].to)?.label ?? editingTransitions[0].to}
+          transitions={editingTransitions}
+          onUpdate={updateTransition}
+          onRemove={removeTransition}
+          onAdd={addTransition}
+          onClose={() => setEditingEdgeKey(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+export function Canvas() {
+  return (
+    <ReactFlowProvider>
+      <CanvasInner />
+    </ReactFlowProvider>
+  );
+}
