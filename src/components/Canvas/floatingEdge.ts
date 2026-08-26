@@ -64,6 +64,14 @@ export function buildCurvedPath(source: Point, target: Point, curvature: number)
   return { path, labelX, labelY };
 }
 
+/** Straight line between two points, used when there's no reverse edge to bow away from. */
+export function buildStraightPath(source: Point, target: Point) {
+  const path = `M ${source.x},${source.y} L ${target.x},${target.y}`;
+  const labelX = (source.x + target.x) / 2;
+  const labelY = (source.y + target.y) / 2;
+  return { path, labelX, labelY };
+}
+
 /** Loop path for a self-transition, bulging above the node. */
 export function buildLoopPath(center: Point, radius: number) {
   const left = { x: center.x - radius * 0.55, y: center.y - radius * 0.86 };

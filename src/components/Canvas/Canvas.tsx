@@ -5,6 +5,7 @@ import {
   Background,
   BackgroundVariant,
   Controls,
+  ControlButton,
   MiniMap,
   MarkerType,
   ConnectionMode,
@@ -23,6 +24,7 @@ import { TransitionEdge, type TransitionEdgeType } from './TransitionEdge';
 import { NODE_DIAMETER } from './floatingEdge';
 import { TransitionDialog, type TransitionDraft } from '../Dialogs/TransitionDialog';
 import { EditTransitionsDialog } from '../Dialogs/EditTransitionsDialog';
+import { exportAutomatonToPng } from '../../persistence/exportImage';
 import { EPSILON, type Transition } from '../../types/automaton';
 import './Canvas.css';
 
@@ -181,6 +183,7 @@ function CanvasInner() {
       const isArmed = key === armedEdgeKey;
       const isHovered = key === hoveredEdgeKey;
       const color = edgeColor({ isArmed, isHovered, isActive, hasError });
+      const isBidirectional = from !== to && groups.has(`${to}=>${from}`);
       return {
         id: key,
         source: from,
@@ -192,6 +195,7 @@ function CanvasInner() {
           color,
           isActive,
           isArmed,
+          isBidirectional,
           transitionIds: transitions.map((t) => t.id),
           editable,
           symbolsCsv: transitions.map((t) => t.input).join(','),
@@ -215,6 +219,7 @@ function CanvasInner() {
           color: 'var(--border-strong)',
           isActive: false,
           isArmed: false,
+          isBidirectional: draftEdge.source !== draftEdge.target && groups.has(`${draftEdge.target}=>${draftEdge.source}`),
           transitionIds: [],
           editable: true,
           symbolsCsv: '',
@@ -253,6 +258,10 @@ function CanvasInner() {
     fitView({ padding: 0.35, maxZoom: 1, duration: 300 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [automaton.id]);
+
+  const handleExportPng = useCallback(() => {
+    exportAutomatonToPng(automaton);
+  }, [automaton]);
 
   const handlePaneDoubleClick = useCallback(
     (event: React.MouseEvent) => {
@@ -379,7 +388,11 @@ function CanvasInner() {
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="var(--border)" />
-        <Controls showInteractive={false} />
+        <Controls showInteractive={false}>
+          <ControlButton onClick={handleExportPng} disabled={automaton.states.length === 0} title="Exportar como PNG">
+            <span className="msy">download</span>
+          </ControlButton>
+        </Controls>
         <MiniMap pannable zoomable className="canvas-minimap" />
       </ReactFlow>
 

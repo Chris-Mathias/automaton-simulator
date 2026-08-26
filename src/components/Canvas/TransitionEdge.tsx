@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BaseEdge, EdgeLabelRenderer, useInternalNode, type Edge, type EdgeProps, type InternalNode, type Node } from '@xyflow/react';
-import { NODE_DIAMETER, buildCurvedPath, buildLoopPath, getFloatingEdgeParams } from './floatingEdge';
+import { NODE_DIAMETER, buildCurvedPath, buildLoopPath, buildStraightPath, getFloatingEdgeParams } from './floatingEdge';
 import type { StateNodeData } from './StateNode';
 import './TransitionEdge.css';
 
@@ -11,6 +11,8 @@ export interface TransitionEdgeData extends Record<string, unknown> {
   isActive: boolean;
   /** Armed for deletion: this transition was already clicked once; clicking it again deletes it. */
   isArmed: boolean;
+  /** True when a transition also exists in the opposite direction (A->B and B->A); curves so the two don't overlap. */
+  isBidirectional: boolean;
   /** DFA/NFA only: lets the label itself be edited as a comma-separated symbol list. */
   editable?: boolean;
   symbolsCsv?: string;
@@ -73,7 +75,9 @@ export function TransitionEdge({ id, source, target, data, markerEnd }: EdgeProp
       extraRadiusFor(sourceNode),
       extraRadiusFor(targetNode),
     );
-    ({ path, labelX, labelY } = buildCurvedPath(sourcePoint, targetPoint, CURVATURE));
+    ({ path, labelX, labelY } = data.isBidirectional
+      ? buildCurvedPath(sourcePoint, targetPoint, CURVATURE)
+      : buildStraightPath(sourcePoint, targetPoint));
   }
 
   const commit = () => {
