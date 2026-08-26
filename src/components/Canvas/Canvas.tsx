@@ -31,6 +31,9 @@ import './Canvas.css';
 const nodeTypes = { stateNode: StateNode };
 const edgeTypes = { transitionEdge: TransitionEdge };
 
+const GRID_SIZE = 22;
+const snapToGridSize = (value: number) => Math.round(value / GRID_SIZE) * GRID_SIZE;
+
 /** Typed aliases for the epsilon transition, since ε isn't on most keyboards. */
 const EPSILON_ALIASES = new Set(['eps', 'epsilon', 'vazio']);
 
@@ -82,6 +85,8 @@ function CanvasInner() {
   const setAlphabet = useAutomatonStore((s) => s.setAlphabet);
   const simulationResult = useAutomatonStore((s) => activeDocument(s).simulationResult);
   const simulationStepIndex = useAutomatonStore((s) => activeDocument(s).simulationStepIndex);
+  const snapToGrid = useAutomatonStore((s) => s.snapToGrid);
+  const toggleSnapToGrid = useAutomatonStore((s) => s.toggleSnapToGrid);
 
   const { screenToFlowPosition, fitView } = useReactFlow();
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(null);
@@ -270,9 +275,11 @@ function CanvasInner() {
       const target = event.target as HTMLElement;
       if (!target.classList.contains('react-flow__pane')) return;
       const flowPos = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-      addState({ x: flowPos.x - NODE_DIAMETER / 2, y: flowPos.y - NODE_DIAMETER / 2 });
+      let position = { x: flowPos.x - NODE_DIAMETER / 2, y: flowPos.y - NODE_DIAMETER / 2 };
+      if (snapToGrid) position = { x: snapToGridSize(position.x), y: snapToGridSize(position.y) };
+      addState(position);
     },
-    [addState, screenToFlowPosition],
+    [addState, screenToFlowPosition, snapToGrid],
   );
 
   const handleNodeDragStop: OnNodeDrag<StateNodeType> = useCallback(
@@ -381,6 +388,8 @@ function CanvasInner() {
         // just on its small left/right connect handles.
         connectionRadius={55}
         zoomOnDoubleClick={false}
+        snapToGrid={snapToGrid}
+        snapGrid={[GRID_SIZE, GRID_SIZE]}
         fitView
         fitViewOptions={{ padding: 0.35, maxZoom: 1 }}
         minZoom={0.3}
@@ -389,6 +398,9 @@ function CanvasInner() {
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="var(--border)" />
         <Controls showInteractive={false}>
+          <ControlButton onClick={toggleSnapToGrid} title="Alinhar ao grid">
+            <span className="msy">{snapToGrid ? 'grid_on' : 'grid_off'}</span>
+          </ControlButton>
           <ControlButton onClick={handleExportPng} disabled={automaton.states.length === 0} title="Exportar como PNG">
             <span className="msy">download</span>
           </ControlButton>

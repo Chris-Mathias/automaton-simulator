@@ -33,8 +33,10 @@ interface StoreState {
   documents: AutomatonDocument[];
   activeId: string;
   theme: 'dark' | 'light';
+  snapToGrid: boolean;
 
   toggleTheme: () => void;
+  toggleSnapToGrid: () => void;
 
   openTab: (automaton: Automaton) => void;
   newTab: (kind: AutomatonKind) => void;
@@ -136,17 +138,26 @@ const initialActiveId =
     ? persisted.activeId
     : initialDocuments[0].id;
 const initialTheme = (localStorage.getItem('automaton-simulator:theme') as 'dark' | 'light' | null) ?? 'dark';
+const initialSnapToGrid = localStorage.getItem('automaton-simulator:snap-to-grid') === 'true';
 
 export const useAutomatonStore = create<StoreState>((set, get) => ({
   documents: initialDocuments,
   activeId: initialActiveId,
   theme: initialTheme,
+  snapToGrid: initialSnapToGrid,
 
   toggleTheme: () =>
     set((state) => {
       const theme = state.theme === 'dark' ? 'light' : 'dark';
       localStorage.setItem('automaton-simulator:theme', theme);
       return { theme };
+    }),
+
+  toggleSnapToGrid: () =>
+    set((state) => {
+      const snapToGrid = !state.snapToGrid;
+      localStorage.setItem('automaton-simulator:snap-to-grid', String(snapToGrid));
+      return { snapToGrid };
     }),
 
   openTab: (automaton) =>
