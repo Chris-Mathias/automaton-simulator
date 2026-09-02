@@ -1,6 +1,9 @@
 import type { InternalNode, Node } from '@xyflow/react';
 
 export const NODE_DIAMETER = 68;
+/** Spacing unit for the background dot grid and the "snap to grid" feature; shared so
+ *  anything that positions states (dragging, new-state placement, auto-layout) lands on it. */
+export const GRID_SIZE = 22;
 
 interface Point {
   x: number;

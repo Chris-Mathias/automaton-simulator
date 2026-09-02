@@ -12,7 +12,7 @@ export interface TransitionEdgeData extends Record<string, unknown> {
   /** Armed for deletion: this transition was already clicked once; clicking it again deletes it. */
   isArmed: boolean;
   /** True when a transition also exists in the opposite direction (A->B and B->A); curves so the two don't overlap. */
-  isBidirectional: boolean;
+  curved: boolean;
   /** DFA/NFA only: lets the label itself be edited as a comma-separated symbol list. */
   editable?: boolean;
   symbolsCsv?: string;
@@ -75,7 +75,7 @@ export function TransitionEdge({ id, source, target, data, markerEnd }: EdgeProp
       extraRadiusFor(sourceNode),
       extraRadiusFor(targetNode),
     );
-    ({ path, labelX, labelY } = data.isBidirectional
+    ({ path, labelX, labelY } = data.curved
       ? buildCurvedPath(sourcePoint, targetPoint, CURVATURE)
       : buildStraightPath(sourcePoint, targetPoint));
   }

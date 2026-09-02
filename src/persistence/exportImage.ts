@@ -1,4 +1,4 @@
-import { NODE_DIAMETER, buildCurvedPath, buildLoopPath } from '../components/Canvas/floatingEdge';
+import { NODE_DIAMETER, buildCurvedPath, buildLoopPath, buildStraightPath } from '../components/Canvas/floatingEdge';
 import type { Automaton, Transition } from '../types/automaton';
 
 /**
@@ -108,7 +108,10 @@ function buildSvg(automaton: Automaton): { svg: string; width: number; height: n
     } else {
       const source = pointOnCircle(at(fromCenter), at(toCenter), RADIUS + 2);
       const target = pointOnCircle(at(toCenter), at(fromCenter), RADIUS + 6);
-      ({ path, labelX, labelY } = buildCurvedPath(source, target, CURVATURE));
+      // Mirrors the canvas: straight unless a transition also exists in the
+      // opposite direction, in which case the two edges bow apart so they don't overlap.
+      const curved = groups.has(`${to}=>${from}`);
+      ({ path, labelX, labelY } = curved ? buildCurvedPath(source, target, CURVATURE) : buildStraightPath(source, target));
     }
 
     edgesSvg += `<path d="${path}" fill="none" stroke="${INK}" stroke-width="1.75" marker-end="url(#arrow)" />`;

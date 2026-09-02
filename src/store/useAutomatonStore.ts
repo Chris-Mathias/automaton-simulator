@@ -7,6 +7,7 @@ import {
   type Transition,
 } from '../types/automaton';
 import { simulate, type SimulationResult } from '../engine/simulate';
+import { computeAutoLayout } from '../engine/autoLayout';
 import { loadWorkspace, saveWorkspace } from '../persistence/storage';
 
 const DEFAULT_SPEED_MS = 700;
@@ -49,6 +50,7 @@ interface StoreState {
 
   addState: (position: { x: number; y: number }) => string;
   updateStatePosition: (id: string, position: { x: number; y: number }) => void;
+  autoLayout: () => void;
   renameState: (id: string, label: string) => void;
   toggleAccept: (id: string) => void;
   setStart: (id: string) => void;
@@ -222,6 +224,15 @@ export const useAutomatonStore = create<StoreState>((set, get) => ({
       ...automaton,
       states: automaton.states.map((s) => (s.id === id ? { ...s, position } : s)),
     })),
+
+  autoLayout: () =>
+    mutateAutomaton(set, get, (automaton) => {
+      const positions = computeAutoLayout(automaton);
+      return {
+        ...automaton,
+        states: automaton.states.map((s) => ({ ...s, position: positions.get(s.id) ?? s.position })),
+      };
+    }),
 
   renameState: (id, label) =>
     mutateAutomaton(set, get, (automaton) => ({

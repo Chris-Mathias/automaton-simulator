@@ -21,7 +21,7 @@ import { activeDocument, useAutomatonStore } from '../../store/useAutomatonStore
 import { validate } from '../../engine/validate';
 import { StateNode, type StateNodeType } from './StateNode';
 import { TransitionEdge, type TransitionEdgeType } from './TransitionEdge';
-import { NODE_DIAMETER } from './floatingEdge';
+import { GRID_SIZE, NODE_DIAMETER } from './floatingEdge';
 import { TransitionDialog, type TransitionDraft } from '../Dialogs/TransitionDialog';
 import { EditTransitionsDialog } from '../Dialogs/EditTransitionsDialog';
 import { exportAutomatonToPng } from '../../persistence/exportImage';
@@ -31,7 +31,6 @@ import './Canvas.css';
 const nodeTypes = { stateNode: StateNode };
 const edgeTypes = { transitionEdge: TransitionEdge };
 
-const GRID_SIZE = 22;
 const snapToGridSize = (value: number) => Math.round(value / GRID_SIZE) * GRID_SIZE;
 
 /** Typed aliases for the epsilon transition, since ε isn't on most keyboards. */
@@ -80,6 +79,7 @@ function CanvasInner() {
   const setStart = useAutomatonStore((s) => s.setStart);
   const removeState = useAutomatonStore((s) => s.removeState);
   const addTransition = useAutomatonStore((s) => s.addTransition);
+  const autoLayout = useAutomatonStore((s) => s.autoLayout);
   const updateTransition = useAutomatonStore((s) => s.updateTransition);
   const removeTransition = useAutomatonStore((s) => s.removeTransition);
   const setAlphabet = useAutomatonStore((s) => s.setAlphabet);
@@ -188,7 +188,7 @@ function CanvasInner() {
       const isArmed = key === armedEdgeKey;
       const isHovered = key === hoveredEdgeKey;
       const color = edgeColor({ isArmed, isHovered, isActive, hasError });
-      const isBidirectional = from !== to && groups.has(`${to}=>${from}`);
+      const curved = from !== to && groups.has(`${to}=>${from}`);
       return {
         id: key,
         source: from,
@@ -200,7 +200,7 @@ function CanvasInner() {
           color,
           isActive,
           isArmed,
-          isBidirectional,
+          curved,
           transitionIds: transitions.map((t) => t.id),
           editable,
           symbolsCsv: transitions.map((t) => t.input).join(','),
@@ -224,7 +224,7 @@ function CanvasInner() {
           color: 'var(--border-strong)',
           isActive: false,
           isArmed: false,
-          isBidirectional: draftEdge.source !== draftEdge.target && groups.has(`${draftEdge.target}=>${draftEdge.source}`),
+          curved: draftEdge.source !== draftEdge.target && groups.has(`${draftEdge.target}=>${draftEdge.source}`),
           transitionIds: [],
           editable: true,
           symbolsCsv: '',
@@ -264,9 +264,24 @@ function CanvasInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [automaton.id]);
 
+  const [layoutRun, setLayoutRun] = useState(0);
+  // Re-frame after an auto-layout pass, once the repositioned nodes have
+  // actually reached ReactFlow's internal store (the `nodes` prop effect above
+  // runs first, in the same commit, since it's declared earlier).
+  useEffect(() => {
+    if (layoutRun === 0) return;
+    fitView({ padding: 0.35, maxZoom: 1, duration: 300 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layoutRun]);
+
   const handleExportPng = useCallback(() => {
     exportAutomatonToPng(automaton);
   }, [automaton]);
+
+  const handleAutoLayout = useCallback(() => {
+    autoLayout();
+    setLayoutRun((n) => n + 1);
+  }, [autoLayout]);
 
   const handlePaneDoubleClick = useCallback(
     (event: React.MouseEvent) => {
@@ -400,6 +415,13 @@ function CanvasInner() {
         <Controls showInteractive={false}>
           <ControlButton onClick={toggleSnapToGrid} title="Alinhar ao grid">
             <span className="msy">{snapToGrid ? 'grid_on' : 'grid_off'}</span>
+          </ControlButton>
+          <ControlButton
+            onClick={handleAutoLayout}
+            disabled={automaton.states.length === 0 || !automaton.startStateId}
+            title="Reorganizar automaticamente"
+          >
+            <span className="msy">schema</span>
           </ControlButton>
           <ControlButton onClick={handleExportPng} disabled={automaton.states.length === 0} title="Exportar como PNG">
             <span className="msy">download</span>
