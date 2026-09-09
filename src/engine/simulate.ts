@@ -1,5 +1,6 @@
 import type { Automaton } from '../types/automaton';
 import { EPSILON } from '../types/automaton';
+import { simulateTuring } from './simulateTuring';
 
 /** Guards against runaway exploration on cyclic ε-transitions / unbounded stack growth. */
 const MAX_STEPS = 1000;
@@ -7,26 +8,36 @@ const MAX_BRANCHES_PER_STEP = 300;
 const MAX_CLOSURE_EXPANSIONS = 2000;
 
 export interface SimulationBranch {
-  /** Stable key identifying this configuration within a step: stateId + stack contents. */
+  /** Stable key identifying this configuration within a step: stateId + stack (or tape + head) contents. */
   key: string;
   stateId: string;
-  /** Top of stack is stack[0]. Always empty for DFA/NFA. */
+  /** Top of stack is stack[0]. Always empty for DFA/NFA/TM. */
   stack: string[];
   /** Transitions traversed since the previous step (ε-chain, then the consuming transition, or just ε-chain for step 0). */
   viaTransitionIds: string[];
+  /** TM only: the finite window of the tape that has been visited. Cells outside it are blank. */
+  tape?: string[];
+  /** TM only: head index into `tape`. Always within bounds — the window grows before the head leaves it. */
+  head?: number;
 }
 
 export interface SimulationStep {
-  /** Symbol consumed to reach this step; null for the initial step (before any input is read). */
+  /** Symbol consumed to reach this step; null for the initial step (before any input is read).
+   *  For a TM this is the symbol read by the transition that produced this configuration. */
   symbolConsumed: string | null;
   branches: SimulationBranch[];
 }
 
+/** TM only: why the machine stopped running. */
+export type HaltReason = 'accept' | 'no-transition' | 'step-limit';
+
 export interface SimulationResult {
   steps: SimulationStep[];
   accepted: boolean;
-  /** True if exploration was cut off by a safety cap (cyclic ε-moves, exploding stack, etc). */
+  /** True if exploration was cut off by a safety cap (cyclic ε-moves, exploding stack, TM step limit, etc). */
   truncated: boolean;
+  /** TM only. */
+  haltReason?: HaltReason;
 }
 
 function branchKey(stateId: string, stack: string[]): string {
@@ -83,6 +94,8 @@ function epsilonClosure(
 }
 
 export function simulate(automaton: Automaton, input: string): SimulationResult {
+  if (automaton.kind === 'TM') return simulateTuring(automaton, input);
+
   if (!automaton.startStateId) {
     return { steps: [], accepted: false, truncated: false };
   }
