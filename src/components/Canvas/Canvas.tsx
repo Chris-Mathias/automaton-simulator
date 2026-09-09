@@ -21,6 +21,7 @@ import { activeDocument, useAutomatonStore } from '../../store/useAutomatonStore
 import { validate } from '../../engine/validate';
 import { StateNode, type StateNodeType } from './StateNode';
 import { TransitionEdge, type TransitionEdgeType } from './TransitionEdge';
+import { TapeStrip } from './TapeStrip';
 import { GRID_SIZE, NODE_DIAMETER } from './floatingEdge';
 import { TransitionDialog, type TransitionDraft } from '../Dialogs/TransitionDialog';
 import { EditTransitionsDialog } from '../Dialogs/EditTransitionsDialog';
@@ -426,6 +427,8 @@ function CanvasInner() {
         </Controls>
         <MiniMap pannable zoomable className="canvas-minimap" />
       </ReactFlow>
+
+      <TapeStrip />
 
       {pendingConnection?.source && pendingConnection.target && (
         <TransitionDialog
