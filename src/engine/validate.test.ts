@@ -2,6 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { validate } from './validate';
 import { BLANK, createEmptyAutomaton, EPSILON, type Automaton } from '../types/automaton';
 
+describe('createEmptyAutomaton', () => {
+  it('starts every alphabet empty, to be filled in from the transitions typed', () => {
+    expect(createEmptyAutomaton('DFA').alphabet).toEqual([]);
+    expect(createEmptyAutomaton('TM').alphabet).toEqual([]);
+    expect(createEmptyAutomaton('TM').tapeAlphabet).toEqual([]);
+  });
+
+  it('keeps the bottom-of-stack marker on a PDA, whose transitions are picked from dropdowns', () => {
+    expect(createEmptyAutomaton('PDA').stackAlphabet).toEqual(['Z']);
+  });
+});
+
 describe('validate', () => {
   it('flags a missing start state and missing accept state on an empty automaton', () => {
     const automaton = createEmptyAutomaton('DFA');

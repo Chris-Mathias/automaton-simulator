@@ -55,9 +55,13 @@ export function createEmptyAutomaton(kind: AutomatonKind, name = 'Novo autômato
     id: crypto.randomUUID(),
     name,
     kind,
-    alphabet: ['0', '1'],
+    // Alphabets start empty and fill themselves in from the symbols typed on
+    // transition labels, so a new automaton never carries symbols nobody asked
+    // for. The PDA is the exception: its transitions are picked from dropdowns,
+    // so it needs the conventional bottom-of-stack marker to start with.
+    alphabet: [],
     stackAlphabet: kind === 'PDA' ? ['Z'] : undefined,
-    tapeAlphabet: kind === 'TM' ? ['0', '1'] : undefined,
+    tapeAlphabet: kind === 'TM' ? [] : undefined,
     states: [],
     transitions: [],
     startStateId: null,

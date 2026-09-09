@@ -141,7 +141,8 @@ grafo já desenhado de PDA para AFD in-place); a conversão AFN→AFD gera um
   de contexto marca o estado inicial (renderizado com uma seta de
   "entrada" vindo do vazio, convenção padrão de livros-texto).
 - **Toolbar (topo)**: escolha do tipo de autômato ao criar um novo, editor
-  de alfabeto (lista de símbolos), botões Novo / Importar / Exportar,
+  de alfabeto (lista de símbolos, que nasce vazia e se preenche sozinha a
+  partir dos símbolos digitados nos rótulos das transições), botões Novo / Importar / Exportar,
   alternância de tema claro/escuro.
 - **Painel lateral (direita, recolhível)**, com abas:
   - *Tabela de transições*: grid editável espelhando o canvas (edição em

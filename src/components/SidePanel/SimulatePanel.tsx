@@ -81,7 +81,7 @@ export function SimulatePanel() {
           value={simulationInput}
           onChange={(e) => setSimulationInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && runSimulation()}
-          placeholder={`Ex.: ${automaton.alphabet.join('')}`}
+          placeholder={automaton.alphabet.length > 0 ? `Ex.: ${automaton.alphabet.join('')}` : undefined}
         />
       </div>
 

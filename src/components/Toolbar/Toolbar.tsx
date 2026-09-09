@@ -99,7 +99,6 @@ export function Toolbar() {
             value={alphabetDraft}
             onChange={(e) => setAlphabetDraft(e.target.value)}
             onBlur={() => setAlphabet(parseSymbols(alphabetDraft))}
-            placeholder="0, 1"
           />
         </label>
         {automaton.kind === 'PDA' && (
@@ -122,7 +121,6 @@ export function Toolbar() {
               value={tapeDraft}
               onChange={(e) => setTapeDraft(e.target.value)}
               onBlur={() => setTapeAlphabet(parseTapeSymbols(tapeDraft))}
-              placeholder={`0, 1, X (o branco ${BLANK} é implícito)`}
             />
           </label>
         )}
