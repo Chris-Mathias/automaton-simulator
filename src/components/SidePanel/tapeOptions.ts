@@ -5,8 +5,8 @@ export function tapeSymbolOptions(tapeAlphabet: string[] | undefined): string[] 
   return [...new Set([...(tapeAlphabet ?? []), BLANK])];
 }
 
-/** Head movements, in the order they're offered. Compact rows render
- *  `TAPE_MOVE_LABELS[value]` instead of the spelled-out label. */
+/** Head movements, in the order they're offered, with spelled-out labels.
+ *  The transition table renders `TAPE_MOVE_LABELS[value]` instead. */
 export const MOVE_OPTIONS: [TapeMove, string][] = [
   ['L', `${TAPE_MOVE_LABELS.L} — esquerda`],
   ['R', `${TAPE_MOVE_LABELS.R} — direita`],

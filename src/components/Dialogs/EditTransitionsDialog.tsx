@@ -1,13 +1,11 @@
 import { useState } from 'react';
 import { Modal } from './Modal';
-import { EPSILON, TAPE_MOVE_LABELS, type AutomatonKind, type TapeMove, type Transition } from '../../types/automaton';
-import { MOVE_OPTIONS, tapeSymbolOptions } from './tapeOptions';
+import { EPSILON, type AutomatonKind, type Transition } from '../../types/automaton';
 
 export function EditTransitionsDialog({
   kind,
   alphabet,
   stackAlphabet,
-  tapeAlphabet,
   fromLabel,
   toLabel,
   transitions,
@@ -19,7 +17,6 @@ export function EditTransitionsDialog({
   kind: AutomatonKind;
   alphabet: string[];
   stackAlphabet?: string[];
-  tapeAlphabet?: string[];
   fromLabel: string;
   toLabel: string;
   transitions: Transition[];
@@ -28,18 +25,11 @@ export function EditTransitionsDialog({
   onAdd: (draft: Omit<Transition, 'id'>) => void;
   onClose: () => void;
 }) {
+  const symbolOptions = kind === 'DFA' ? alphabet : [...alphabet, EPSILON];
   const isPda = kind === 'PDA';
-  const isTm = kind === 'TM';
-  const symbolOptions = isTm
-    ? tapeSymbolOptions(tapeAlphabet)
-    : kind === 'DFA'
-      ? alphabet
-      : [...alphabet, EPSILON];
   const [draftInput, setDraftInput] = useState(symbolOptions[0] ?? '');
   const [draftPop, setDraftPop] = useState('');
   const [draftPush, setDraftPush] = useState('');
-  const [draftWrite, setDraftWrite] = useState(symbolOptions[0] ?? '');
-  const [draftMove, setDraftMove] = useState<TapeMove>('R');
 
   return (
     <Modal title={`Editar transições: ${fromLabel} → ${toLabel}`} onClose={onClose}>
@@ -53,33 +43,6 @@ export function EditTransitionsDialog({
                 </option>
               ))}
             </select>
-            {isTm && (
-              <>
-                <span className="edit-transitions__arrow" aria-hidden="true">→</span>
-                <select
-                  className="mono"
-                  value={t.write ?? t.input}
-                  onChange={(e) => onUpdate(t.id, { write: e.target.value })}
-                >
-                  {symbolOptions.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="edit-transitions__move"
-                  value={t.move ?? 'R'}
-                  onChange={(e) => onUpdate(t.id, { move: e.target.value as TapeMove })}
-                >
-                  {MOVE_OPTIONS.map(([value]) => (
-                    <option key={value} value={value}>
-                      {TAPE_MOVE_LABELS[value]}
-                    </option>
-                  ))}
-                </select>
-              </>
-            )}
             {isPda && (
               <>
                 <select value={t.pop ?? ''} onChange={(e) => onUpdate(t.id, { pop: e.target.value })}>
@@ -105,43 +68,13 @@ export function EditTransitionsDialog({
         ))}
 
         <div className="edit-transitions__row edit-transitions__row--new">
-          <select
-            className="mono"
-            value={draftInput}
-            onChange={(e) => {
-              if (draftWrite === draftInput) setDraftWrite(e.target.value);
-              setDraftInput(e.target.value);
-            }}
-          >
+          <select className="mono" value={draftInput} onChange={(e) => setDraftInput(e.target.value)}>
             {symbolOptions.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
             ))}
           </select>
-          {isTm && (
-            <>
-              <span className="edit-transitions__arrow" aria-hidden="true">→</span>
-              <select className="mono" value={draftWrite} onChange={(e) => setDraftWrite(e.target.value)}>
-                {symbolOptions.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="edit-transitions__move"
-                value={draftMove}
-                onChange={(e) => setDraftMove(e.target.value as TapeMove)}
-              >
-                {MOVE_OPTIONS.map(([value]) => (
-                  <option key={value} value={value}>
-                    {TAPE_MOVE_LABELS[value]}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
           {isPda && (
             <>
               <select value={draftPop} onChange={(e) => setDraftPop(e.target.value)}>
@@ -161,13 +94,7 @@ export function EditTransitionsDialog({
             onClick={() => {
               const from = transitions[0].from;
               const to = transitions[0].to;
-              onAdd({
-                from,
-                to,
-                input: draftInput,
-                ...(isPda ? { pop: draftPop, push: draftPush } : {}),
-                ...(isTm ? { write: draftWrite, move: draftMove } : {}),
-              });
+              onAdd({ from, to, input: draftInput, ...(isPda ? { pop: draftPop, push: draftPush } : {}) });
               setDraftPop('');
               setDraftPush('');
             }}

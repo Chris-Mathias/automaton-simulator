@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { activeDocument, useAutomatonStore } from '../../store/useAutomatonStore';
 import { EPSILON, TAPE_MOVE_LABELS, type TapeMove } from '../../types/automaton';
-import { MOVE_OPTIONS, tapeSymbolOptions } from '../Dialogs/tapeOptions';
+import { MOVE_OPTIONS, tapeSymbolOptions } from './tapeOptions';
 
 export function TransitionList() {
   const automaton = useAutomatonStore((s) => activeDocument(s).automaton);

@@ -169,18 +169,6 @@
   min-width: 0;
 }
 
-.edit-transitions__arrow {
-  flex: 0 0 auto;
-  color: var(--text-faint);
-}
-
-/* The move picker holds a single glyph (E/D/—); it shouldn't share the
-   symbol selects' flex growth. */
-.edit-transitions__move {
-  flex: 0 0 auto !important;
-  text-align: center;
-}
-
 .edit-transitions__row--new {
   border-top: 1px solid var(--divider-soft);
   padding-top: 8px;
