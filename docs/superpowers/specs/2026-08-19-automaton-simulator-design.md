@@ -72,7 +72,7 @@ interface Transition {
   pop?: string;         // PDA: símbolo desempilhado ('' = ε, nada desempilhado)
   push?: string;        // PDA: símbolo(s) empilhado(s) ('' = ε, nada empilhado)
   write?: string;       // MT: símbolo escrito (vazio = mantém o que foi lido)
-  move?: 'L' | 'R' | 'S'; // MT: movimento do cabeçote (exibido como E/D/—)
+  move?: 'L' | 'R' | 'S'; // MT: movimento do cabeçote (exibido como E/D/P)
 }
 
 interface Automaton {
@@ -136,8 +136,7 @@ grafo já desenhado de PDA para AFD in-place); a conversão AFN→AFD gera um
 
 - **Canvas (React Flow), centro da tela**: clique em área vazia cria um
   estado; arrastar de um estado a outro cria uma transição (abre um
-  popover pequeno para escolher símbolo, pop/push no caso de PDA, ou
-  lê/escreve/move no caso de MT);
+  popover pequeno para escolher símbolo, ou pop/push no caso de PDA);
   duplo-clique no estado renomeia/alterna aceitação; ação de toolbar/menu
   de contexto marca o estado inicial (renderizado com uma seta de
   "entrada" vindo do vazio, convenção padrão de livros-texto).
@@ -151,6 +150,14 @@ grafo já desenhado de PDA para AFD in-place); a conversão AFN→AFD gera um
     Reiniciar, slider de velocidade, destaque do(s) estado(s) ativo(s) no
     canvas em cor diferenciada, visualização da pilha (widget vertical)
     quando for PDA, banner de aceito/rejeitado ao final da trilha.
+- **Rótulos editáveis no canvas**: AFD/AFN aceitam uma lista de símbolos
+  separados por vírgula; a MT aceita triplas `lê,escreve,move` separadas
+  por `;` (ex.: `a,A,D; b,B,E`), com o movimento escrito como E/D/P (ou
+  L/R/S). O texto exibido é exatamente o texto que se digita, então editar
+  um rótulo nunca exige traduzir entre duas notações. `parseTuringTransitions`
+  valida a sintaxe a cada tecla: texto malformado é **recusado** — Enter não
+  confirma e sair do campo descarta a edição, em vez de aplicar pela metade.
+  Só o PDA ainda usa modal, porque pop/push não cabem numa linha de texto.
 - **Fita da MT** (`TapeStrip`): faixa flutuante no rodapé do canvas,
   visível só durante a simulação de uma MT. O cabeçote fica fixo no
   centro e a fita desliza por baixo dele; células além da janela já
