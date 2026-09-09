@@ -49,10 +49,9 @@
   border-color: var(--error);
 }
 
-/* Both sit under the editor without displacing it — the label is anchored to
-   a point on the edge, so growing the box would drag the input off the line. */
-.transition-edge__error,
-.transition-edge__hint {
+/* Sits under the editor without displacing it — the label is anchored to a
+   point on the edge, so growing the box would drag the input off the line. */
+.transition-edge__error {
   position: absolute;
   top: calc(100% + 5px);
   left: 50%;
@@ -65,16 +64,7 @@
   line-height: 1.35;
   text-align: center;
   box-shadow: var(--shadow-md);
-}
-
-.transition-edge__error {
   background: var(--error-soft);
   border: 1px solid var(--error);
   color: var(--error);
-}
-
-.transition-edge__hint {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  color: var(--text-dim);
 }

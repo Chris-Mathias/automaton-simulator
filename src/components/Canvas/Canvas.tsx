@@ -28,7 +28,6 @@ import { EditTransitionsDialog } from '../Dialogs/EditTransitionsDialog';
 import { exportAutomatonToPng } from '../../persistence/exportImage';
 import { BLANK, EPSILON, formatTransitionLabels, type Transition } from '../../types/automaton';
 import {
-  TURING_SYNTAX_HINT,
   TURING_SYNTAX_PLACEHOLDER,
   formatTuringTransitions,
   parseTuringTransitions,
@@ -263,7 +262,6 @@ function CanvasInner() {
               )
             : transitions.map((t) => t.input).join(','),
           placeholder: isTm ? TURING_SYNTAX_PLACEHOLDER : undefined,
-          hint: isTm ? TURING_SYNTAX_HINT : undefined,
           validateText: isTm ? validateTuringText : undefined,
           autoFocus: editable && key === autoFocusKey,
           onCommitText: !editable
@@ -294,7 +292,6 @@ function CanvasInner() {
           editable: true,
           editText: '',
           placeholder: isTm ? TURING_SYNTAX_PLACEHOLDER : undefined,
-          hint: isTm ? TURING_SYNTAX_HINT : undefined,
           validateText: isTm ? validateTuringText : undefined,
           autoFocus: true,
           onCommitText: (text: string) => {

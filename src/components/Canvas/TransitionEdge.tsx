@@ -17,8 +17,6 @@ export interface TransitionEdgeData extends Record<string, unknown> {
   editable?: boolean;
   editText?: string;
   placeholder?: string;
-  /** Shown under the editor while the text is still valid, to teach the format. */
-  hint?: string;
   autoFocus?: boolean;
   /** Returns an error message for text that must not be committed, or null. */
   validateText?: (text: string) => string | null;
@@ -147,11 +145,7 @@ export function TransitionEdge({ id, source, target, data, markerEnd }: EdgeProp
                 }}
                 onClick={(e) => e.stopPropagation()}
               />
-              {error ? (
-                <div className="transition-edge__error">{error}</div>
-              ) : (
-                data.hint && <div className="transition-edge__hint">{data.hint}</div>
-              )}
+              {error && <div className="transition-edge__error">{error}</div>}
             </>
           ) : (
             <div

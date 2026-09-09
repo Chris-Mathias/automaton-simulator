@@ -32,8 +32,6 @@ export function normalizeTapeSymbol(raw: string): string {
 
 export const TURING_SYNTAX_PLACEHOLDER = 'lê,escreve,move';
 
-export const TURING_SYNTAX_HINT =
-  `lê,escreve,move — ex.: "a,A,D". Movimento: E (esquerda), D (direita) ou P (parado). Branco: _ ou beta. Separe várias transições com ";".`;
 
 /** The editable text for a group of transitions: `a,A,D; b,B,E`. */
 export function formatTuringTransitions(transitions: TuringTriple[]): string {

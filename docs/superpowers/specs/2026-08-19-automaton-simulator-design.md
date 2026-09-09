@@ -159,6 +159,8 @@ grafo já desenhado de PDA para AFD in-place); a conversão AFN→AFD gera um
   um rótulo nunca exige traduzir entre duas notações. `parseTuringTransitions`
   valida a sintaxe a cada tecla: texto malformado é **recusado** — Enter não
   confirma e sair do campo descarta a edição, em vez de aplicar pela metade.
+  A mensagem só aparece quando há erro; o formato esperado fica no
+  placeholder do campo, sem tooltip permanente.
   Só o PDA ainda usa modal, porque pop/push não cabem numa linha de texto.
 - **Fita da MT** (`TapeStrip`): faixa flutuante no rodapé do canvas,
   visível só durante a simulação de uma MT. O cabeçote fica fixo no
