@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { activeDocument, useAutomatonStore } from '../../store/useAutomatonStore';
-import { EPSILON } from '../../types/automaton';
+import { EPSILON, TAPE_MOVE_LABELS, type TapeMove } from '../../types/automaton';
+import { MOVE_OPTIONS, tapeSymbolOptions } from '../Dialogs/tapeOptions';
 
 export function TransitionList() {
   const automaton = useAutomatonStore((s) => activeDocument(s).automaton);
@@ -8,14 +9,21 @@ export function TransitionList() {
   const removeTransition = useAutomatonStore((s) => s.removeTransition);
   const addTransition = useAutomatonStore((s) => s.addTransition);
 
-  const symbolOptions = automaton.kind === 'DFA' ? automaton.alphabet : [...automaton.alphabet, EPSILON];
   const isPda = automaton.kind === 'PDA';
+  const isTm = automaton.kind === 'TM';
+  const symbolOptions = isTm
+    ? tapeSymbolOptions(automaton.tapeAlphabet)
+    : automaton.kind === 'DFA'
+      ? automaton.alphabet
+      : [...automaton.alphabet, EPSILON];
 
   const [draftFrom, setDraftFrom] = useState('');
   const [draftTo, setDraftTo] = useState('');
   const [draftInput, setDraftInput] = useState('');
   const [draftPop, setDraftPop] = useState('');
   const [draftPush, setDraftPush] = useState('');
+  const [draftWrite, setDraftWrite] = useState('');
+  const [draftMove, setDraftMove] = useState<TapeMove>('R');
 
   const canAdd = draftFrom && draftTo && draftInput;
 
@@ -28,10 +36,12 @@ export function TransitionList() {
       to: draftTo,
       input: draftInput,
       ...(isPda ? { pop: draftPop, push: draftPush } : {}),
+      ...(isTm ? { write: draftWrite || draftInput, move: draftMove } : {}),
     });
     setDraftInput('');
     setDraftPop('');
     setDraftPush('');
+    setDraftWrite('');
   };
 
   if (automaton.states.length === 0) {
@@ -44,9 +54,11 @@ export function TransitionList() {
         <tr>
           <th>De</th>
           <th>Para</th>
-          <th>Símbolo</th>
+          <th>{isTm ? 'Lê' : 'Símbolo'}</th>
           {isPda && <th>Pop</th>}
           {isPda && <th>Push</th>}
+          {isTm && <th>Escreve</th>}
+          {isTm && <th>Move</th>}
           <th />
         </tr>
       </thead>
@@ -86,6 +98,35 @@ export function TransitionList() {
                   placeholder="ε"
                   onChange={(e) => updateTransition(t.id, { push: e.target.value })}
                 />
+              </td>
+            )}
+            {isTm && (
+              <td>
+                <select
+                  className="mono"
+                  value={t.write ?? t.input}
+                  onChange={(e) => updateTransition(t.id, { write: e.target.value })}
+                >
+                  {symbolOptions.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </td>
+            )}
+            {isTm && (
+              <td>
+                <select
+                  value={t.move ?? 'R'}
+                  onChange={(e) => updateTransition(t.id, { move: e.target.value as TapeMove })}
+                >
+                  {MOVE_OPTIONS.map(([value]) => (
+                    <option key={value} value={value}>
+                      {TAPE_MOVE_LABELS[value]}
+                    </option>
+                  ))}
+                </select>
               </td>
             )}
             <td className="data-table__center">
@@ -145,6 +186,29 @@ export function TransitionList() {
                 placeholder="ε"
                 onChange={(e) => setDraftPush(e.target.value)}
               />
+            </td>
+          )}
+          {isTm && (
+            <td>
+              <select className="mono" value={draftWrite} onChange={(e) => setDraftWrite(e.target.value)}>
+                <option value="">(= lido)</option>
+                {symbolOptions.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </td>
+          )}
+          {isTm && (
+            <td>
+              <select value={draftMove} onChange={(e) => setDraftMove(e.target.value as TapeMove)}>
+                {MOVE_OPTIONS.map(([value]) => (
+                  <option key={value} value={value}>
+                    {TAPE_MOVE_LABELS[value]}
+                  </option>
+                ))}
+              </select>
             </td>
           )}
           <td className="data-table__center">
