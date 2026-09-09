@@ -4,8 +4,9 @@ Data: 2026-08-19
 
 ## Visão geral
 
-Aplicação web client-only para criar e simular autômatos (AFD, AFN e Autômato
-de Pilha/PDA) visualmente, no estilo do diagrama clássico de referência
+Aplicação web client-only para criar e simular autômatos (AFD, AFN, Autômato
+de Pilha/PDA e Máquina de Turing/MT) visualmente, no estilo do diagrama
+clássico de referência
 (`Imagem colada.png`): estados como círculos, estado de aceitação como
 círculo duplo, transições como setas rotuladas. Uso principal: estudo/entrega
 de trabalho da disciplina de Teoria da Computação.
@@ -24,7 +25,8 @@ de trabalho da disciplina de Teoria da Computação.
 
 ## Fora de escopo (YAGNI)
 
-- Máquina de Turing.
+- Máquina de Turing não-determinística, e MT de múltiplas fitas
+  (a MT de fita única determinística foi implementada — ver abaixo).
 - Contas de usuário, sincronização em nuvem, colaboração multi-usuário.
 - Minimização de AFD.
 - Conversão regex ↔ autômato.
@@ -51,7 +53,7 @@ O autômato tem uma representação serializável independente do React Flow;
 um adaptador fino traduz entre esse modelo e os nós/arestas do React Flow.
 
 ```ts
-type AutomatonKind = 'DFA' | 'NFA' | 'PDA';
+type AutomatonKind = 'DFA' | 'NFA' | 'PDA' | 'TM';
 
 interface AutomatonState {
   id: string;
@@ -65,9 +67,12 @@ interface Transition {
   id: string;
   from: string;
   to: string;
-  input: string;       // símbolo do alfabeto, ou 'ε' para epsilon (AFN/PDA)
+  input: string;       // símbolo do alfabeto, ou 'ε' para epsilon (AFN/PDA);
+                       // na MT, o símbolo lido sob o cabeçote
   pop?: string;         // PDA: símbolo desempilhado ('' = ε, nada desempilhado)
   push?: string;        // PDA: símbolo(s) empilhado(s) ('' = ε, nada empilhado)
+  write?: string;       // MT: símbolo escrito (vazio = mantém o que foi lido)
+  move?: 'L' | 'R' | 'S'; // MT: movimento do cabeçote (exibido como E/D/—)
 }
 
 interface Automaton {
@@ -77,6 +82,7 @@ interface Automaton {
   kind: AutomatonKind;
   alphabet: string[];
   stackAlphabet?: string[]; // apenas PDA
+  tapeAlphabet?: string[];  // apenas MT (o branco '␣' é sempre implícito)
   states: AutomatonState[];
   transitions: Transition[];
   startStateId: string | null;
@@ -97,6 +103,14 @@ grafo já desenhado de PDA para AFD in-place); a conversão AFN→AFD gera um
     (busca sobre as escolhas não-determinísticas, com epsilon-closure).
   - Critério de aceitação do PDA: **aceitação por estado final** (não por
     pilha vazia) — mais simples e é o padrão usado em exercícios de curso.
+  - MT (`simulateTuring`, mesmo formato de resultado): fita única infinita
+    nos dois lados, **determinística**. Um "passo" é uma transição da
+    máquina, não um símbolo consumido, e a aceitação é por **parada em
+    estado de aceitação** — entrar num estado de aceitação para a máquina
+    mesmo que haja transições saindo dele. Sem transição aplicável = parada
+    com rejeição. Como o problema da parada não é decidível, a execução é
+    limitada a 2000 passos (e 2000 células), reportada como `truncated` com
+    `haltReason: 'step-limit'` em vez de fingir uma rejeição.
   - Ter a trilha inteira pré-computada torna step/back/autoplay/velocidade
     triviais: são apenas navegação de índice num array, sem
     re-simulação.
@@ -108,6 +122,12 @@ grafo já desenhado de PDA para AFD in-place); a conversão AFN→AFD gera um
     incompletude de AFD (falta transição para algum símbolo em algum
     estado) e não-determinismo indevido em AFD (duas transições pelo
     mesmo símbolo saindo do mesmo estado).
+  - MT: não-determinismo (a simulação é determinística), símbolo lido ou
+    escrito fora do alfabeto da fita, transição sem movimento definido,
+    transição por ε (a MT sempre lê algum símbolo, no mínimo o branco),
+    e avisos sobre o alfabeto de entrada não contido no da fita ou o
+    branco declarado como símbolo de entrada. **Não** há aviso de
+    incompletude: numa MT, transição faltando é parada legítima.
 - `convertNfaToDfa(nfa): Automaton`
   - Construção de subconjuntos com epsilon-closure; estados do DFA gerado
     são rotulados pelo conjunto de origem (ex. `"{q1,q2}"`).
@@ -116,7 +136,8 @@ grafo já desenhado de PDA para AFD in-place); a conversão AFN→AFD gera um
 
 - **Canvas (React Flow), centro da tela**: clique em área vazia cria um
   estado; arrastar de um estado a outro cria uma transição (abre um
-  popover pequeno para escolher símbolo, ou pop/push no caso de PDA);
+  popover pequeno para escolher símbolo, pop/push no caso de PDA, ou
+  lê/escreve/move no caso de MT);
   duplo-clique no estado renomeia/alterna aceitação; ação de toolbar/menu
   de contexto marca o estado inicial (renderizado com uma seta de
   "entrada" vindo do vazio, convenção padrão de livros-texto).
@@ -130,6 +151,13 @@ grafo já desenhado de PDA para AFD in-place); a conversão AFN→AFD gera um
     Reiniciar, slider de velocidade, destaque do(s) estado(s) ativo(s) no
     canvas em cor diferenciada, visualização da pilha (widget vertical)
     quando for PDA, banner de aceito/rejeitado ao final da trilha.
+- **Fita da MT** (`TapeStrip`): faixa flutuante no rodapé do canvas,
+  visível só durante a simulação de uma MT. O cabeçote fica fixo no
+  centro e a fita desliza por baixo dele; células além da janela já
+  visitada aparecem como brancos, e as pontas desvanecem para comunicar
+  que a fita é infinita. O banner de resultado distingue os três
+  desfechos possíveis: aceita, rejeitada (parou sem transição) e não
+  parou (limite de passos).
 - **Faixa de validação**: lista os problemas retornados por `validate()`;
   clicar num item centraliza/destaca o estado ou aresta correspondente no
   canvas.
