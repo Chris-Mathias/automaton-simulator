@@ -307,6 +307,13 @@
   color: var(--error);
 }
 
+/* A Turing machine that hits the step cap neither accepted nor rejected — it
+   simply never halted, which is its own outcome rather than a rejection. */
+.result-banner--warning {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
 .result-banner__note {
   font-weight: 400;
   font-size: var(--fs-1);

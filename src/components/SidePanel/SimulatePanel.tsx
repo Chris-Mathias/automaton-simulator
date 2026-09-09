@@ -1,9 +1,40 @@
 import { useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import { activeDocument, useAutomatonStore } from '../../store/useAutomatonStore';
+import { BLANK } from '../../types/automaton';
+import type { SimulationResult } from '../../engine/simulate';
 
 const SPEED_MIN = 150;
 const SPEED_MAX = 1800;
+
+/**
+ * A Turing machine doesn't reject by running out of input — it rejects by
+ * halting with no move available, and may not halt at all. The banner names
+ * which of those happened instead of just "rejeitada".
+ */
+function turingOutcome(
+  result: SimulationResult,
+  stateLabel: string,
+  read: string,
+): { tone: 'accept' | 'reject' | 'warning'; icon: string; label: string; note?: string } {
+  if (result.haltReason === 'accept') {
+    return { tone: 'accept', icon: 'check_circle', label: 'Aceita', note: `parou em ${stateLabel}` };
+  }
+  if (result.haltReason === 'step-limit') {
+    return {
+      tone: 'warning',
+      icon: 'hourglass_disabled',
+      label: 'Não parou',
+      note: 'limite de passos atingido — a máquina pode estar em laço infinito',
+    };
+  }
+  return {
+    tone: 'reject',
+    icon: 'cancel',
+    label: 'Rejeitada',
+    note: `parou em ${stateLabel}: nenhuma transição lendo "${read}"`,
+  };
+}
 
 export function SimulatePanel() {
   const automaton = useAutomatonStore((s) => activeDocument(s).automaton);
@@ -32,6 +63,11 @@ export function SimulatePanel() {
 
   const currentStep = steps[simulationStepIndex];
   const stateById = new Map(automaton.states.map((s) => [s.id, s]));
+
+  const isTm = automaton.kind === 'TM';
+  const tmConfig = isTm ? currentStep?.branches[0] : undefined;
+  const tmRead = tmConfig?.tape?.[tmConfig.head ?? 0] ?? BLANK;
+  const tmStateLabel = tmConfig ? (stateById.get(tmConfig.stateId)?.label ?? tmConfig.stateId) : '?';
 
   const speedSliderValue = 1950 - playbackSpeedMs;
   const speedFillPct = ((speedSliderValue - SPEED_MIN) / (SPEED_MAX - SPEED_MIN)) * 100;
@@ -97,34 +133,59 @@ export function SimulatePanel() {
 
           <div className="simulate-panel__progress mono">
             passo {simulationStepIndex} / {steps.length - 1}
-            {currentStep?.symbolConsumed !== null && currentStep && (
+            {!isTm && currentStep?.symbolConsumed !== null && currentStep && (
               <span> · lendo "{currentStep.symbolConsumed}"</span>
             )}
           </div>
 
           <div className="simulate-panel__branches">
-            {currentStep?.branches.length === 0 && (
-              <div className="branch-chip branch-chip--dead">sem configurações ativas (rejeitado)</div>
-            )}
-            {currentStep?.branches.map((b) => (
-              <div key={b.key} className={`branch-chip ${stateById.get(b.stateId)?.isAccept ? 'branch-chip--accept' : ''}`}>
-                <span className="mono">{stateById.get(b.stateId)?.label ?? b.stateId}</span>
-                {automaton.kind === 'PDA' && (
-                  <span className="branch-chip__stack mono">[{b.stack.join(' ') || 'vazia'}]</span>
+            {isTm ? (
+              tmConfig && (
+                <div className={`branch-chip ${stateById.get(tmConfig.stateId)?.isAccept ? 'branch-chip--accept' : ''}`}>
+                  <span className="mono">{tmStateLabel}</span>
+                  <span className="branch-chip__stack mono">lê "{tmRead}"</span>
+                </div>
+              )
+            ) : (
+              <>
+                {currentStep?.branches.length === 0 && (
+                  <div className="branch-chip branch-chip--dead">sem configurações ativas (rejeitado)</div>
                 )}
-              </div>
-            ))}
+                {currentStep?.branches.map((b) => (
+                  <div key={b.key} className={`branch-chip ${stateById.get(b.stateId)?.isAccept ? 'branch-chip--accept' : ''}`}>
+                    <span className="mono">{stateById.get(b.stateId)?.label ?? b.stateId}</span>
+                    {automaton.kind === 'PDA' && (
+                      <span className="branch-chip__stack mono">[{b.stack.join(' ') || 'vazia'}]</span>
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
           </div>
 
-          {atEnd && (
-            <div className={`result-banner ${simulationResult.accepted ? 'result-banner--accept' : 'result-banner--reject'}`}>
-              <span className="result-banner__label">
-                <span className="msy">{simulationResult.accepted ? 'check_circle' : 'cancel'}</span>
-                {simulationResult.accepted ? 'Aceita' : 'Rejeitada'}
-              </span>
-              {simulationResult.truncated && <span className="result-banner__note">(execução truncada por limite de passos)</span>}
-            </div>
-          )}
+          {atEnd &&
+            (isTm ? (
+              (() => {
+                const outcome = turingOutcome(simulationResult, tmStateLabel, tmRead);
+                return (
+                  <div className={`result-banner result-banner--${outcome.tone}`}>
+                    <span className="result-banner__label">
+                      <span className="msy">{outcome.icon}</span>
+                      {outcome.label}
+                    </span>
+                    {outcome.note && <span className="result-banner__note">{outcome.note}</span>}
+                  </div>
+                );
+              })()
+            ) : (
+              <div className={`result-banner ${simulationResult.accepted ? 'result-banner--accept' : 'result-banner--reject'}`}>
+                <span className="result-banner__label">
+                  <span className="msy">{simulationResult.accepted ? 'check_circle' : 'cancel'}</span>
+                  {simulationResult.accepted ? 'Aceita' : 'Rejeitada'}
+                </span>
+                {simulationResult.truncated && <span className="result-banner__note">(execução truncada por limite de passos)</span>}
+              </div>
+            ))}
         </>
       )}
     </div>
