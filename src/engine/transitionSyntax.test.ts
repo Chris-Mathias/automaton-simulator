@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { formatTuringTransitions, parseTuringTransitions } from './transitionSyntax';
+import { formatTuringTransitions, normalizeTapeSymbol, parseTuringTransitions } from './transitionSyntax';
+import { BLANK } from '../types/automaton';
 
 /** Unwraps a parse that is expected to succeed. */
 function triples(text: string) {
@@ -21,7 +22,19 @@ describe('parseTuringTransitions', () => {
   });
 
   it('parses multi-character symbols', () => {
-    expect(triples('beta,beta,P')).toEqual([{ input: 'beta', write: 'beta', move: 'S' }]);
+    expect(triples('aa,bb,P')).toEqual([{ input: 'aa', write: 'bb', move: 'S' }]);
+  });
+
+  it('accepts typed aliases for the blank, which has no key on the keyboard', () => {
+    expect(triples('_,beta,D')).toEqual([{ input: BLANK, write: BLANK, move: 'R' }]);
+    expect(triples('β,branco,E')).toEqual([{ input: BLANK, write: BLANK, move: 'L' }]);
+    expect(triples('BETA,Blank,P')).toEqual([{ input: BLANK, write: BLANK, move: 'S' }]);
+  });
+
+  it('leaves ordinary symbols alone', () => {
+    expect(normalizeTapeSymbol('b')).toBe('b');
+    expect(normalizeTapeSymbol('X')).toBe('X');
+    expect(normalizeTapeSymbol(BLANK)).toBe(BLANK);
   });
 
   it('parses several triples separated by semicolons', () => {
@@ -72,5 +85,9 @@ describe('formatTuringTransitions', () => {
   it('round-trips through the parser', () => {
     const text = 'a,A,D; b,B,E; c,C,P';
     expect(formatTuringTransitions(triples(text))).toBe(text);
+  });
+
+  it('renders a blank typed as an alias with its canonical glyph', () => {
+    expect(formatTuringTransitions(triples('_,_,D'))).toBe(`${BLANK},${BLANK},D`);
   });
 });

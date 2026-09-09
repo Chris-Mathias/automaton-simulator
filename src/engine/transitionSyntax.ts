@@ -1,4 +1,4 @@
-import { TAPE_MOVE_LABELS, type TapeMove } from '../types/automaton';
+import { BLANK, TAPE_MOVE_LABELS, type TapeMove } from '../types/automaton';
 
 export interface TuringTriple {
   input: string;
@@ -17,10 +17,23 @@ const MOVE_ALIASES: Record<string, TapeMove> = {
   p: 'S', s: 'S', parado: 'S', stay: 'S', '-': 'S', '—': 'S',
 };
 
+/**
+ * Typed aliases for the blank, since '␣' isn't on any keyboard — the same
+ * accommodation the DFA/NFA labels make for 'ε'. Beta is what the Brazilian
+ * textbooks write, underscore is the quickest to reach.
+ *
+ * Anything listed here can no longer be used as a tape symbol in its own right.
+ */
+const BLANK_ALIASES = new Set(['_', 'beta', 'β', 'branco', 'blank']);
+
+export function normalizeTapeSymbol(raw: string): string {
+  return BLANK_ALIASES.has(raw.toLowerCase()) ? BLANK : raw;
+}
+
 export const TURING_SYNTAX_PLACEHOLDER = 'lê,escreve,move';
 
 export const TURING_SYNTAX_HINT =
-  'Use lê,escreve,move — por exemplo "a,A,D". O movimento é E (esquerda), D (direita) ou P (parado). Separe várias transições com ";".';
+  `lê,escreve,move — ex.: "a,A,D". Movimento: E (esquerda), D (direita) ou P (parado). Branco: _ ou beta. Separe várias transições com ";".`;
 
 /** The editable text for a group of transitions: `a,A,D; b,B,E`. */
 export function formatTuringTransitions(transitions: TuringTriple[]): string {
@@ -55,7 +68,9 @@ export function parseTuringTransitions(text: string): TuringParseResult {
       };
     }
 
-    const [input, write, rawMove] = parts;
+    const [rawInput, rawWrite, rawMove] = parts;
+    const input = normalizeTapeSymbol(rawInput);
+    const write = normalizeTapeSymbol(rawWrite);
     if (!input || !write) {
       return { ok: false, error: `Em "${entry}", o símbolo lido e o escrito não podem ficar vazios.` };
     }
