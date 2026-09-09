@@ -8,7 +8,7 @@ export const BLANK = '␣';
 /** Turing machine head movement: left, right, or stay. */
 export type TapeMove = 'L' | 'R' | 'S';
 
-export const TAPE_MOVE_LABELS: Record<TapeMove, string> = { L: 'E', R: 'D', S: '—' };
+export const TAPE_MOVE_LABELS: Record<TapeMove, string> = { L: 'E', R: 'D', S: 'P' };
 
 export interface AutomatonState {
   id: string;
@@ -64,14 +64,23 @@ export function createEmptyAutomaton(kind: AutomatonKind, name = 'Novo autômato
   };
 }
 
-/** Edge/arrow caption for a single transition: `a` (AFD/AFN), `a, Z→AZ` (PDA), `a → b, D` (MT). */
+/** Caption for a single transition: `a` (AFD/AFN), `a, Z→AZ` (PDA), `a,A,D` (MT). */
 export function formatTransitionLabel(kind: AutomatonKind, t: Transition): string {
   if (kind === 'PDA') return `${t.input}, ${t.pop || EPSILON}→${t.push || EPSILON}`;
+  // On a TM the caption is exactly what you type into it, so editing a label
+  // never means translating between two notations.
   if (kind === 'TM') {
     const move = t.move ? TAPE_MOVE_LABELS[t.move] : '?';
-    return `${t.input} → ${t.write || t.input}, ${move}`;
+    return `${t.input},${t.write || t.input},${move}`;
   }
   return t.input;
+}
+
+/** Caption for every transition sharing a pair of states. */
+export function formatTransitionLabels(kind: AutomatonKind, transitions: Transition[]): string {
+  // TM captions already contain commas, so they're separated by semicolons.
+  const separator = kind === 'TM' ? '; ' : ', ';
+  return transitions.map((t) => formatTransitionLabel(kind, t)).join(separator);
 }
 
 export function isAutomaton(value: unknown): value is Automaton {

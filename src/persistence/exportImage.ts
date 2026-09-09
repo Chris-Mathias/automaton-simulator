@@ -1,5 +1,5 @@
 import { NODE_DIAMETER, buildCurvedPath, buildLoopPath, buildStraightPath } from '../components/Canvas/floatingEdge';
-import { formatTransitionLabel, type Automaton, type Transition } from '../types/automaton';
+import { formatTransitionLabels, type Automaton, type Transition } from '../types/automaton';
 
 /**
  * Builds the export PNG from the automaton's *data* (positions, labels,
@@ -93,7 +93,7 @@ function buildSvg(automaton: Automaton): { svg: string; width: number; height: n
     const toCenter = centers.get(to);
     if (!fromCenter || !toCenter) continue;
 
-    const label = [...group].sort((a, b) => a.input.localeCompare(b.input)).map((t) => formatTransitionLabel(automaton.kind, t)).join(', ');
+    const label = formatTransitionLabels(automaton.kind, [...group].sort((a, b) => a.input.localeCompare(b.input)));
 
     let path: string;
     let labelX: number;
