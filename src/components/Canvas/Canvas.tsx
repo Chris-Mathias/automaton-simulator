@@ -25,7 +25,7 @@ import { GRID_SIZE, NODE_DIAMETER } from './floatingEdge';
 import { TransitionDialog, type TransitionDraft } from '../Dialogs/TransitionDialog';
 import { EditTransitionsDialog } from '../Dialogs/EditTransitionsDialog';
 import { exportAutomatonToPng } from '../../persistence/exportImage';
-import { EPSILON, type Transition } from '../../types/automaton';
+import { EPSILON, formatTransitionLabel, type Transition } from '../../types/automaton';
 import './Canvas.css';
 
 const nodeTypes = { stateNode: StateNode };
@@ -38,13 +38,6 @@ const EPSILON_ALIASES = new Set(['eps', 'epsilon', 'vazio']);
 
 function normalizeSymbol(raw: string): string {
   return EPSILON_ALIASES.has(raw.toLowerCase()) ? EPSILON : raw;
-}
-
-function formatLabel(kind: string, t: Transition) {
-  if (kind !== 'PDA') return t.input;
-  const popLabel = t.pop || 'ε';
-  const pushLabel = t.push || 'ε';
-  return `${t.input}, ${popLabel}→${pushLabel}`;
 }
 
 /**
@@ -178,7 +171,10 @@ function CanvasInner() {
       list.push(t);
       groups.set(key, list);
     }
-    const editable = automaton.kind !== 'PDA';
+    // PDA and TM transitions carry more than a symbol (pop/push, write/move),
+    // so their labels can't be edited as a plain comma-separated list — clicking
+    // them opens the modal instead.
+    const editable = automaton.kind !== 'PDA' && automaton.kind !== 'TM';
     const result: TransitionEdgeType[] = [...groups.entries()].map(([key, unsortedTransitions]) => {
       const transitions = [...unsortedTransitions].sort((a, b) => a.input.localeCompare(b.input));
       const from = transitions[0].from;
@@ -196,7 +192,7 @@ function CanvasInner() {
         type: 'transitionEdge',
         markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
         data: {
-          label: transitions.map((t) => formatLabel(automaton.kind, t)).join(', '),
+          label: transitions.map((t) => formatTransitionLabel(automaton.kind, t)).join(', '),
           color,
           isActive,
           isArmed,
@@ -305,7 +301,7 @@ function CanvasInner() {
   const handleConnect: OnConnect = useCallback(
     (connection) => {
       if (!connection.source || !connection.target) return;
-      if (automaton.kind === 'PDA') {
+      if (automaton.kind === 'PDA' || automaton.kind === 'TM') {
         setPendingConnection(connection);
         return;
       }
@@ -348,8 +344,9 @@ function CanvasInner() {
 
   const handleEdgeClick = useCallback(
     (_event: React.MouseEvent, edge: TransitionEdgeType) => {
-      // PDA transitions (which need pop/push fields) always open the modal.
-      if (automaton.kind === 'PDA') {
+      // PDA and TM transitions (which need pop/push, resp. write/move fields)
+      // always open the modal.
+      if (automaton.kind === 'PDA' || automaton.kind === 'TM') {
         setEditingEdgeKey(edge.id);
         return;
       }
@@ -435,6 +432,7 @@ function CanvasInner() {
           kind={automaton.kind}
           alphabet={automaton.alphabet}
           stackAlphabet={automaton.stackAlphabet}
+          tapeAlphabet={automaton.tapeAlphabet}
           fromLabel={stateById.get(pendingConnection.source)?.label ?? pendingConnection.source}
           toLabel={stateById.get(pendingConnection.target)?.label ?? pendingConnection.target}
           onSubmit={handleTransitionSubmit}
@@ -447,6 +445,7 @@ function CanvasInner() {
           kind={automaton.kind}
           alphabet={automaton.alphabet}
           stackAlphabet={automaton.stackAlphabet}
+          tapeAlphabet={automaton.tapeAlphabet}
           fromLabel={stateById.get(editingTransitions[0].from)?.label ?? editingTransitions[0].from}
           toLabel={stateById.get(editingTransitions[0].to)?.label ?? editingTransitions[0].to}
           transitions={editingTransitions}
