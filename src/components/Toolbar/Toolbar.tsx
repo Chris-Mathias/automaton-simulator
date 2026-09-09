@@ -3,6 +3,7 @@ import { activeDocument, useAutomatonStore } from '../../store/useAutomatonStore
 import { convertNfaToDfa } from '../../engine/convertNfaToDfa';
 import { exportAutomatonToFile, importAutomatonFromFile } from '../../persistence/exportImport';
 import { BLANK } from '../../types/automaton';
+import { normalizeTapeSymbol } from '../../engine/transitionSyntax';
 import './Toolbar.css';
 
 function parseSymbols(raw: string): string[] {
@@ -12,6 +13,13 @@ function parseSymbols(raw: string): string[] {
     if (trimmed) seen.add(trimmed);
   }
   return [...seen].sort();
+}
+
+/** The blank is always implicit on the tape, so declaring it — under any of
+ *  its typed aliases — is a no-op rather than a second, literal symbol that
+ *  would then shadow the alias on every transition label. */
+function parseTapeSymbols(raw: string): string[] {
+  return [...new Set(parseSymbols(raw).map(normalizeTapeSymbol))].filter((s) => s !== BLANK);
 }
 
 export function Toolbar() {
@@ -113,7 +121,7 @@ export function Toolbar() {
               className="mono"
               value={tapeDraft}
               onChange={(e) => setTapeDraft(e.target.value)}
-              onBlur={() => setTapeAlphabet(parseSymbols(tapeDraft))}
+              onBlur={() => setTapeAlphabet(parseTapeSymbols(tapeDraft))}
               placeholder={`0, 1, X (o branco ${BLANK} é implícito)`}
             />
           </label>
