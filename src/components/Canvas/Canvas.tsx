@@ -26,7 +26,13 @@ import { GRID_SIZE, NODE_DIAMETER } from './floatingEdge';
 import { TransitionDialog, type TransitionDraft } from '../Dialogs/TransitionDialog';
 import { EditTransitionsDialog } from '../Dialogs/EditTransitionsDialog';
 import { exportAutomatonToPng } from '../../persistence/exportImage';
-import { EPSILON, formatTransitionLabel, type Transition } from '../../types/automaton';
+import { BLANK, EPSILON, formatTransitionLabels, type Transition } from '../../types/automaton';
+import {
+  TURING_SYNTAX_HINT,
+  TURING_SYNTAX_PLACEHOLDER,
+  formatTuringTransitions,
+  parseTuringTransitions,
+} from '../../engine/transitionSyntax';
 import './Canvas.css';
 
 const nodeTypes = { stateNode: StateNode };
@@ -77,6 +83,7 @@ function CanvasInner() {
   const updateTransition = useAutomatonStore((s) => s.updateTransition);
   const removeTransition = useAutomatonStore((s) => s.removeTransition);
   const setAlphabet = useAutomatonStore((s) => s.setAlphabet);
+  const setTapeAlphabet = useAutomatonStore((s) => s.setTapeAlphabet);
   const simulationResult = useAutomatonStore((s) => activeDocument(s).simulationResult);
   const simulationStepIndex = useAutomatonStore((s) => activeDocument(s).simulationStepIndex);
   const snapToGrid = useAutomatonStore((s) => s.snapToGrid);
@@ -164,6 +171,56 @@ function CanvasInner() {
     [automaton.transitions, automaton.alphabet, addTransition, removeTransition, setAlphabet],
   );
 
+  const handleCommitTuring = useCallback(
+    (from: string, to: string, text: string) => {
+      const parsed = parseTuringTransitions(text);
+      if (!parsed.ok) return;
+
+      // Reconcile by the symbol read, so editing a triple's write/move keeps
+      // the transition's identity instead of replacing it with a new one.
+      const existing = automaton.transitions.filter((t) => t.from === from && t.to === to);
+      const byInput = new Map(existing.map((t) => [t.input, t]));
+      const kept = new Set<string>();
+
+      for (const triple of parsed.triples) {
+        const current = byInput.get(triple.input);
+        kept.add(triple.input);
+        if (current) {
+          if (current.write !== triple.write || current.move !== triple.move) {
+            updateTransition(current.id, { write: triple.write, move: triple.move });
+          }
+        } else {
+          addTransition({ from, to, input: triple.input, write: triple.write, move: triple.move });
+        }
+      }
+      for (const t of existing) {
+        if (!kept.has(t.input)) removeTransition(t.id);
+      }
+
+      // Same reasoning as the input alphabet on a DFA/NFA: a symbol typed on
+      // the canvas shouldn't be reported as foreign to the tape it's used on.
+      const tapeAlphabet = automaton.tapeAlphabet ?? [];
+      const used = parsed.triples.flatMap((t) => [t.input, t.write]);
+      const newSymbols = [...new Set(used)].filter((s) => s !== BLANK && !tapeAlphabet.includes(s));
+      if (newSymbols.length > 0) setTapeAlphabet([...tapeAlphabet, ...newSymbols].sort());
+
+      setAutoFocusKey(null);
+    },
+    [
+      automaton.transitions,
+      automaton.tapeAlphabet,
+      addTransition,
+      updateTransition,
+      removeTransition,
+      setTapeAlphabet,
+    ],
+  );
+
+  const validateTuringText = useCallback((text: string) => {
+    const parsed = parseTuringTransitions(text);
+    return parsed.ok ? null : parsed.error;
+  }, []);
+
   const storeEdges = useMemo<TransitionEdgeType[]>(() => {
     const groups = new Map<string, Transition[]>();
     for (const t of automaton.transitions) {
@@ -172,10 +229,10 @@ function CanvasInner() {
       list.push(t);
       groups.set(key, list);
     }
-    // PDA and TM transitions carry more than a symbol (pop/push, write/move),
-    // so their labels can't be edited as a plain comma-separated list — clicking
-    // them opens the modal instead.
-    const editable = automaton.kind !== 'PDA' && automaton.kind !== 'TM';
+    // Only PDA transitions still need the modal: pop/push don't reduce to a
+    // single line of text the way a symbol list or a read/write/move triple does.
+    const editable = automaton.kind !== 'PDA';
+    const isTm = automaton.kind === 'TM';
     const result: TransitionEdgeType[] = [...groups.entries()].map(([key, unsortedTransitions]) => {
       const transitions = [...unsortedTransitions].sort((a, b) => a.input.localeCompare(b.input));
       const from = transitions[0].from;
@@ -193,16 +250,27 @@ function CanvasInner() {
         type: 'transitionEdge',
         markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
         data: {
-          label: transitions.map((t) => formatTransitionLabel(automaton.kind, t)).join(', '),
+          label: formatTransitionLabels(automaton.kind, transitions),
           color,
           isActive,
           isArmed,
           curved,
           transitionIds: transitions.map((t) => t.id),
           editable,
-          symbolsCsv: transitions.map((t) => t.input).join(','),
+          editText: isTm
+            ? formatTuringTransitions(
+                transitions.map((t) => ({ input: t.input, write: t.write || t.input, move: t.move ?? 'R' })),
+              )
+            : transitions.map((t) => t.input).join(','),
+          placeholder: isTm ? TURING_SYNTAX_PLACEHOLDER : undefined,
+          hint: isTm ? TURING_SYNTAX_HINT : undefined,
+          validateText: isTm ? validateTuringText : undefined,
           autoFocus: editable && key === autoFocusKey,
-          onCommitSymbols: editable ? (csv: string) => handleCommitSymbols(from, to, csv) : undefined,
+          onCommitText: !editable
+            ? undefined
+            : isTm
+              ? (text: string) => handleCommitTuring(from, to, text)
+              : (csv: string) => handleCommitSymbols(from, to, csv),
         },
       };
     });
@@ -224,10 +292,14 @@ function CanvasInner() {
           curved: draftEdge.source !== draftEdge.target && groups.has(`${draftEdge.target}=>${draftEdge.source}`),
           transitionIds: [],
           editable: true,
-          symbolsCsv: '',
+          editText: '',
+          placeholder: isTm ? TURING_SYNTAX_PLACEHOLDER : undefined,
+          hint: isTm ? TURING_SYNTAX_HINT : undefined,
+          validateText: isTm ? validateTuringText : undefined,
           autoFocus: true,
-          onCommitSymbols: (csv: string) => {
-            handleCommitSymbols(draftEdge.source, draftEdge.target, csv);
+          onCommitText: (text: string) => {
+            if (isTm) handleCommitTuring(draftEdge.source, draftEdge.target, text);
+            else handleCommitSymbols(draftEdge.source, draftEdge.target, text);
             setDraftEdge(null);
           },
           onCancel: () => setDraftEdge(null),
@@ -243,6 +315,8 @@ function CanvasInner() {
     errorTransitionIds,
     autoFocusKey,
     handleCommitSymbols,
+    handleCommitTuring,
+    validateTuringText,
     draftEdge,
     armedEdgeKey,
     hoveredEdgeKey,
@@ -302,7 +376,7 @@ function CanvasInner() {
   const handleConnect: OnConnect = useCallback(
     (connection) => {
       if (!connection.source || !connection.target) return;
-      if (automaton.kind === 'PDA' || automaton.kind === 'TM') {
+      if (automaton.kind === 'PDA') {
         setPendingConnection(connection);
         return;
       }
@@ -345,13 +419,12 @@ function CanvasInner() {
 
   const handleEdgeClick = useCallback(
     (_event: React.MouseEvent, edge: TransitionEdgeType) => {
-      // PDA and TM transitions (which need pop/push, resp. write/move fields)
-      // always open the modal.
-      if (automaton.kind === 'PDA' || automaton.kind === 'TM') {
+      // PDA transitions (which need pop/push fields) always open the modal.
+      if (automaton.kind === 'PDA') {
         setEditingEdgeKey(edge.id);
         return;
       }
-      // DFA/NFA: clicking the line (not the label, which edits symbols
+      // DFA/NFA/TM: clicking the line (not the label, which edits symbols
       // inline) arms it for deletion; clicking the same, already-armed line
       // again deletes it. Undo (Ctrl+Z) covers accidental deletes.
       if (armedEdgeKey === edge.id) {
@@ -435,7 +508,6 @@ function CanvasInner() {
           kind={automaton.kind}
           alphabet={automaton.alphabet}
           stackAlphabet={automaton.stackAlphabet}
-          tapeAlphabet={automaton.tapeAlphabet}
           fromLabel={stateById.get(pendingConnection.source)?.label ?? pendingConnection.source}
           toLabel={stateById.get(pendingConnection.target)?.label ?? pendingConnection.target}
           onSubmit={handleTransitionSubmit}
@@ -448,7 +520,6 @@ function CanvasInner() {
           kind={automaton.kind}
           alphabet={automaton.alphabet}
           stackAlphabet={automaton.stackAlphabet}
-          tapeAlphabet={automaton.tapeAlphabet}
           fromLabel={stateById.get(editingTransitions[0].from)?.label ?? editingTransitions[0].from}
           toLabel={stateById.get(editingTransitions[0].to)?.label ?? editingTransitions[0].to}
           transitions={editingTransitions}
