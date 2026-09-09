@@ -153,7 +153,9 @@ grafo já desenhado de PDA para AFD in-place); a conversão AFN→AFD gera um
 - **Rótulos editáveis no canvas**: AFD/AFN aceitam uma lista de símbolos
   separados por vírgula; a MT aceita triplas `lê,escreve,move` separadas
   por `;` (ex.: `a,A,D; b,B,E`), com o movimento escrito como E/D/P (ou
-  L/R/S). O texto exibido é exatamente o texto que se digita, então editar
+  L/R/S). Como `␣` não existe no teclado, o branco pode ser digitado como
+  `_`, `beta`, `β`, `branco` ou `blank` — mesmo recurso que os rótulos de
+  AFD/AFN já oferecem para o `ε`; o rótulo sempre exibe `␣`. O texto exibido é exatamente o texto que se digita, então editar
   um rótulo nunca exige traduzir entre duas notações. `parseTuringTransitions`
   valida a sintaxe a cada tecla: texto malformado é **recusado** — Enter não
   confirma e sair do campo descarta a edição, em vez de aplicar pela metade.
