@@ -144,7 +144,7 @@ function CanvasInner() {
     (from: string, to: string, csv: string) => {
       const edit = planSymbolEdit(automaton, from, to, csv);
       applyTransitionEdit(edit);
-      if (edit.newSymbols.length > 0) setAlphabet([...automaton.alphabet, ...edit.newSymbols].sort());
+      if (edit.newInputSymbols.length > 0) setAlphabet([...automaton.alphabet, ...edit.newInputSymbols].sort());
     },
     [automaton, applyTransitionEdit, setAlphabet],
   );
@@ -154,11 +154,14 @@ function CanvasInner() {
       const edit = planTuringEdit(automaton, from, to, text);
       if (!edit) return;
       applyTransitionEdit(edit);
-      if (edit.newSymbols.length > 0) {
-        setTapeAlphabet([...(automaton.tapeAlphabet ?? []), ...edit.newSymbols].sort());
+      if (edit.newTapeSymbols.length > 0) {
+        setTapeAlphabet([...(automaton.tapeAlphabet ?? []), ...edit.newTapeSymbols].sort());
+      }
+      if (edit.newInputSymbols.length > 0) {
+        setAlphabet([...automaton.alphabet, ...edit.newInputSymbols].sort());
       }
     },
-    [automaton, applyTransitionEdit, setTapeAlphabet],
+    [automaton, applyTransitionEdit, setAlphabet, setTapeAlphabet],
   );
 
   const validateTuringText = useCallback((text: string) => {

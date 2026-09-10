@@ -20,23 +20,23 @@ describe('planSymbolEdit', () => {
       { from: 'q0', to: 'q1', input: 'a' },
       { from: 'q0', to: 'q1', input: 'b' },
     ]);
-    expect(edit.newSymbols).toEqual(['a', 'b']);
+    expect(edit.newInputSymbols).toEqual(['a', 'b']);
   });
 
   it('only reports symbols the alphabet is missing', () => {
     const automaton = { ...withStates('DFA'), alphabet: ['a'] };
-    expect(planSymbolEdit(automaton, 'q0', 'q1', 'a,b').newSymbols).toEqual(['b']);
+    expect(planSymbolEdit(automaton, 'q0', 'q1', 'a,b').newInputSymbols).toEqual(['b']);
   });
 
   it('never adds epsilon to the alphabet', () => {
     const edit = planSymbolEdit(withStates('NFA'), 'q0', 'q1', `a,${EPSILON}`);
-    expect(edit.newSymbols).toEqual(['a']);
+    expect(edit.newInputSymbols).toEqual(['a']);
   });
 
   it('expands typed aliases for epsilon', () => {
     const edit = planSymbolEdit(withStates('NFA'), 'q0', 'q1', 'eps');
     expect(edit.add).toEqual([{ from: 'q0', to: 'q1', input: EPSILON }]);
-    expect(edit.newSymbols).toEqual([]);
+    expect(edit.newInputSymbols).toEqual([]);
   });
 
   it('removes the transitions whose symbols were deleted from the label', () => {
@@ -58,19 +58,29 @@ describe('planTuringEdit', () => {
   it('adds read and write symbols to an empty tape alphabet', () => {
     const edit = planTuringEdit(withStates('TM'), 'q0', 'q1', 'a,X,D')!;
     expect(edit.add).toEqual([{ from: 'q0', to: 'q1', input: 'a', write: 'X', move: 'R' }]);
-    expect(edit.newSymbols).toEqual(['a', 'X']);
+    expect(edit.newTapeSymbols).toEqual(['a', 'X']);
+  });
+
+  it('fills the input alphabet from the symbols read, but not the ones written', () => {
+    const edit = planTuringEdit(withStates('TM'), 'q0', 'q1', 'a,X,D; b,Y,E')!;
+    expect(edit.newInputSymbols).toEqual(['a', 'b']);
   });
 
   it('never adds the blank to the tape alphabet, since it is implicit', () => {
     const edit = planTuringEdit(withStates('TM'), 'q0', 'q1', '_,_,D')!;
-    expect(edit.newSymbols).toEqual([]);
+    expect(edit.newTapeSymbols).toEqual([]);
     expect(edit.add).toEqual([{ from: 'q0', to: 'q1', input: BLANK, write: BLANK, move: 'R' }]);
   });
 
-  it('leaves the input alphabet alone — it cannot tell markers from input symbols', () => {
-    const automaton = withStates('TM');
-    planTuringEdit(automaton, 'q0', 'q1', 'a,X,D');
-    expect(automaton.alphabet).toEqual([]);
+  it('keeps the blank out of the input alphabet, which must not contain it', () => {
+    expect(planTuringEdit(withStates('TM'), 'q0', 'q1', '_,a,D')!.newInputSymbols).toEqual([]);
+  });
+
+  it('only reports symbols the alphabets are missing', () => {
+    const automaton = { ...withStates('TM'), alphabet: ['a'], tapeAlphabet: ['a', 'X'] };
+    const edit = planTuringEdit(automaton, 'q0', 'q1', 'a,X,D; b,Y,E')!;
+    expect(edit.newInputSymbols).toEqual(['b']);
+    expect(edit.newTapeSymbols).toEqual(['b', 'Y']);
   });
 
   it('keeps a transition identity when only its write or move changes', () => {

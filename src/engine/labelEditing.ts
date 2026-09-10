@@ -14,12 +14,16 @@ export interface TransitionEdit {
   update: { id: string; patch: Partial<Omit<Transition, 'id'>> }[];
   add: Omit<Transition, 'id'>[];
   /**
-   * Symbols typed here that the relevant alphabet doesn't declare yet — the
-   * input alphabet for a DFA/NFA, the tape alphabet for a TM. Keeping them in
-   * sync means a symbol used on the canvas is never treated as foreign to the
-   * automaton that uses it (AFN→AFD conversion only iterates declared symbols).
+   * Symbols typed here that the input alphabet doesn't declare yet. Keeping it
+   * in sync means a symbol used on the canvas is never treated as foreign to
+   * the automaton that uses it (AFN→AFD conversion only iterates declared
+   * symbols). On a TM these are the symbols *read*, which is a superset of the
+   * true input alphabet — auxiliary markers are read too, and nothing in the
+   * transition distinguishes them from real input.
    */
-  newSymbols: string[];
+  newInputSymbols: string[];
+  /** TM only: symbols read or written that the tape alphabet doesn't declare yet. */
+  newTapeSymbols: string[];
 }
 
 /** DFA/NFA: the label is a comma-separated list of input symbols. */
@@ -40,7 +44,8 @@ export function planSymbolEdit(automaton: Automaton, from: string, to: string, c
     remove: existing.filter((t) => !symbols.includes(t.input)).map((t) => t.id),
     update: [],
     add: symbols.filter((s) => !existingInputs.has(s)).map((input) => ({ from, to, input })),
-    newSymbols: symbols.filter((s) => s !== EPSILON && !automaton.alphabet.includes(s)),
+    newInputSymbols: symbols.filter((s) => s !== EPSILON && !automaton.alphabet.includes(s)),
+    newTapeSymbols: [],
   };
 }
 
@@ -60,7 +65,7 @@ export function planTuringEdit(
   const existing = automaton.transitions.filter((t) => t.from === from && t.to === to);
   const byInput = new Map(existing.map((t) => [t.input, t]));
 
-  const edit: TransitionEdit = { remove: [], update: [], add: [], newSymbols: [] };
+  const edit: TransitionEdit = { remove: [], update: [], add: [], newInputSymbols: [], newTapeSymbols: [] };
   const kept = new Set<string>();
 
   for (const { input, write, move } of parsed.triples) {
@@ -78,7 +83,13 @@ export function planTuringEdit(
 
   const tapeAlphabet = automaton.tapeAlphabet ?? [];
   const used = new Set(parsed.triples.flatMap((t) => [t.input, t.write]));
-  edit.newSymbols = [...used].filter((s) => s !== BLANK && !tapeAlphabet.includes(s));
+  edit.newTapeSymbols = [...used].filter((s) => s !== BLANK && !tapeAlphabet.includes(s));
+
+  // The blank is deliberately left out: it's read constantly but declaring it
+  // as input would trip the validation warning that exists to catch exactly
+  // that, so the auto-fill would be reporting its own work as a mistake.
+  const read = new Set(parsed.triples.map((t) => t.input));
+  edit.newInputSymbols = [...read].filter((s) => s !== BLANK && !automaton.alphabet.includes(s));
 
   return edit;
 }

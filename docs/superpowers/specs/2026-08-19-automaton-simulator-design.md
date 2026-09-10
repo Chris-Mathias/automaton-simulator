@@ -142,7 +142,11 @@ grafo já desenhado de PDA para AFD in-place); a conversão AFN→AFD gera um
   "entrada" vindo do vazio, convenção padrão de livros-texto).
 - **Toolbar (topo)**: escolha do tipo de autômato ao criar um novo, editor
   de alfabeto (lista de símbolos, que nasce vazia e se preenche sozinha a
-  partir dos símbolos digitados nos rótulos das transições), botões Novo / Importar / Exportar,
+  partir dos símbolos digitados nos rótulos das transições). Numa MT, o
+  alfabeto da fita recebe tudo que é lido ou escrito, e o de entrada recebe
+  o que é **lido** — um superconjunto de Σ, já que marcadores auxiliares
+  também são lidos e nada na transição os distingue da entrada real; o
+  branco fica de fora dos dois, por ser implícito na fita e proibido em Σ, botões Novo / Importar / Exportar,
   alternância de tema claro/escuro.
 - **Painel lateral (direita, recolhível)**, com abas:
   - *Tabela de transições*: grid editável espelhando o canvas (edição em
