@@ -26,25 +26,15 @@ import { GRID_SIZE, NODE_DIAMETER } from './floatingEdge';
 import { TransitionDialog, type TransitionDraft } from '../Dialogs/TransitionDialog';
 import { EditTransitionsDialog } from '../Dialogs/EditTransitionsDialog';
 import { exportAutomatonToPng } from '../../persistence/exportImage';
-import { BLANK, EPSILON, formatTransitionLabels, type Transition } from '../../types/automaton';
-import {
-  TURING_SYNTAX_PLACEHOLDER,
-  formatTuringTransitions,
-  parseTuringTransitions,
-} from '../../engine/transitionSyntax';
+import { formatTransitionLabels, type Transition } from '../../types/automaton';
+import { TURING_SYNTAX_PLACEHOLDER, formatTuringTransitions, parseTuringTransitions } from '../../engine/transitionSyntax';
+import { planSymbolEdit, planTuringEdit, type TransitionEdit } from '../../engine/labelEditing';
 import './Canvas.css';
 
 const nodeTypes = { stateNode: StateNode };
 const edgeTypes = { transitionEdge: TransitionEdge };
 
 const snapToGridSize = (value: number) => Math.round(value / GRID_SIZE) * GRID_SIZE;
-
-/** Typed aliases for the epsilon transition, since ε isn't on most keyboards. */
-const EPSILON_ALIASES = new Set(['eps', 'epsilon', 'vazio']);
-
-function normalizeSymbol(raw: string): string {
-  return EPSILON_ALIASES.has(raw.toLowerCase()) ? EPSILON : raw;
-}
 
 /**
  * Single source of truth for an edge's color, shared between the visible
@@ -140,79 +130,35 @@ function CanvasInner() {
     [automaton.states, activeStateIds, errorStateIds, renameState, toggleAccept, setStart, removeState],
   );
 
-  const handleCommitSymbols = useCallback(
-    (from: string, to: string, csv: string) => {
-      const symbols = [
-        ...new Set(
-          csv
-            .split(',')
-            .map((s) => normalizeSymbol(s.trim()))
-            .filter(Boolean),
-        ),
-      ].sort();
-      const existing = automaton.transitions.filter((t) => t.from === from && t.to === to);
-      for (const t of existing) {
-        if (!symbols.includes(t.input)) removeTransition(t.id);
-      }
-      const existingInputs = new Set(existing.map((t) => t.input));
-      for (const symbol of symbols) {
-        if (!existingInputs.has(symbol)) addTransition({ from, to, input: symbol });
-      }
-
-      // Keep the declared alphabet in sync with what's actually typed, so a
-      // symbol used on the canvas is never silently dropped by AFN→AFD
-      // conversion (which only iterates the declared alphabet).
-      const newSymbols = symbols.filter((s) => s !== EPSILON && !automaton.alphabet.includes(s));
-      if (newSymbols.length > 0) setAlphabet([...automaton.alphabet, ...newSymbols].sort());
-
+  const applyTransitionEdit = useCallback(
+    (edit: TransitionEdit) => {
+      for (const id of edit.remove) removeTransition(id);
+      for (const { id, patch } of edit.update) updateTransition(id, patch);
+      for (const transition of edit.add) addTransition(transition);
       setAutoFocusKey(null);
     },
-    [automaton.transitions, automaton.alphabet, addTransition, removeTransition, setAlphabet],
+    [addTransition, updateTransition, removeTransition],
+  );
+
+  const handleCommitSymbols = useCallback(
+    (from: string, to: string, csv: string) => {
+      const edit = planSymbolEdit(automaton, from, to, csv);
+      applyTransitionEdit(edit);
+      if (edit.newSymbols.length > 0) setAlphabet([...automaton.alphabet, ...edit.newSymbols].sort());
+    },
+    [automaton, applyTransitionEdit, setAlphabet],
   );
 
   const handleCommitTuring = useCallback(
     (from: string, to: string, text: string) => {
-      const parsed = parseTuringTransitions(text);
-      if (!parsed.ok) return;
-
-      // Reconcile by the symbol read, so editing a triple's write/move keeps
-      // the transition's identity instead of replacing it with a new one.
-      const existing = automaton.transitions.filter((t) => t.from === from && t.to === to);
-      const byInput = new Map(existing.map((t) => [t.input, t]));
-      const kept = new Set<string>();
-
-      for (const triple of parsed.triples) {
-        const current = byInput.get(triple.input);
-        kept.add(triple.input);
-        if (current) {
-          if (current.write !== triple.write || current.move !== triple.move) {
-            updateTransition(current.id, { write: triple.write, move: triple.move });
-          }
-        } else {
-          addTransition({ from, to, input: triple.input, write: triple.write, move: triple.move });
-        }
+      const edit = planTuringEdit(automaton, from, to, text);
+      if (!edit) return;
+      applyTransitionEdit(edit);
+      if (edit.newSymbols.length > 0) {
+        setTapeAlphabet([...(automaton.tapeAlphabet ?? []), ...edit.newSymbols].sort());
       }
-      for (const t of existing) {
-        if (!kept.has(t.input)) removeTransition(t.id);
-      }
-
-      // Same reasoning as the input alphabet on a DFA/NFA: a symbol typed on
-      // the canvas shouldn't be reported as foreign to the tape it's used on.
-      const tapeAlphabet = automaton.tapeAlphabet ?? [];
-      const used = parsed.triples.flatMap((t) => [t.input, t.write]);
-      const newSymbols = [...new Set(used)].filter((s) => s !== BLANK && !tapeAlphabet.includes(s));
-      if (newSymbols.length > 0) setTapeAlphabet([...tapeAlphabet, ...newSymbols].sort());
-
-      setAutoFocusKey(null);
     },
-    [
-      automaton.transitions,
-      automaton.tapeAlphabet,
-      addTransition,
-      updateTransition,
-      removeTransition,
-      setTapeAlphabet,
-    ],
+    [automaton, applyTransitionEdit, setTapeAlphabet],
   );
 
   const validateTuringText = useCallback((text: string) => {
