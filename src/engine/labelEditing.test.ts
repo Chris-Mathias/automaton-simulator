@@ -72,6 +72,21 @@ describe('planTuringEdit', () => {
     expect(edit.add).toEqual([{ from: 'q0', to: 'q1', input: BLANK, write: BLANK, move: 'R' }]);
   });
 
+  it('leaves written-only markers out of the input alphabet', () => {
+    // Nothing reads A or B yet, so they stay on the tape alphabet alone.
+    const edit = planTuringEdit(withStates('TM'), 'q0', 'q1', 'a,A,D; b,B,E')!;
+    expect(edit.newInputSymbols).toEqual(['a', 'b']);
+    expect(edit.newTapeSymbols).toEqual(['a', 'A', 'b', 'B']);
+  });
+
+  it('picks a marker up once some transition reads it back', () => {
+    // The moment the machine scans back over what it wrote, that marker is a
+    // symbol read — indistinguishable, here, from real input.
+    const automaton = { ...withStates('TM'), alphabet: ['a', 'b'], tapeAlphabet: ['A', 'B', 'a', 'b'] };
+    const edit = planTuringEdit(automaton, 'q1', 'q1', 'A,A,D')!;
+    expect(edit.newInputSymbols).toEqual(['A']);
+  });
+
   it('keeps the blank out of the input alphabet, which must not contain it', () => {
     expect(planTuringEdit(withStates('TM'), 'q0', 'q1', '_,a,D')!.newInputSymbols).toEqual([]);
   });
