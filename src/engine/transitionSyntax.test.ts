@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { formatTuringTransitions, normalizeTapeSymbol, parseTuringTransitions } from './transitionSyntax';
-import { BLANK } from '../types/automaton';
+import {
+  formatPdaTransitions,
+  formatTuringTransitions,
+  normalizeTapeSymbol,
+  parsePdaTransitions,
+  parseTuringTransitions,
+} from './transitionSyntax';
+import { BLANK, EPSILON } from '../types/automaton';
 
 /** Unwraps a parse that is expected to succeed. */
 function triples(text: string) {
@@ -89,5 +95,92 @@ describe('formatTuringTransitions', () => {
 
   it('renders a blank typed as an alias with its canonical glyph', () => {
     expect(formatTuringTransitions(triples('_,_,D'))).toBe(`${BLANK},${BLANK},D`);
+  });
+});
+
+/** Unwraps a PDA parse that is expected to succeed. */
+function pdaTriples(text: string) {
+  const parsed = parsePdaTransitions(text);
+  if (!parsed.ok) throw new Error(`esperava sucesso, veio: ${parsed.error}`);
+  return parsed.triples;
+}
+
+/** The error from a PDA parse that is expected to fail. */
+function pdaError(text: string): string {
+  const parsed = parsePdaTransitions(text);
+  if (parsed.ok) throw new Error('esperava falha, veio sucesso');
+  return parsed.error;
+}
+
+describe('parsePdaTransitions', () => {
+  it('reads a read/pop/push triple', () => {
+    expect(pdaTriples('a,Z>AZ')).toEqual([{ input: 'a', pop: 'Z', push: 'AZ' }]);
+  });
+
+  it('accepts every spelling of the arrow', () => {
+    const expected = [{ input: 'a', pop: 'Z', push: 'A' }];
+    expect(pdaTriples('a,Z>A')).toEqual(expected);
+    expect(pdaTriples('a,Z->A')).toEqual(expected);
+    expect(pdaTriples('a,Z→A')).toEqual(expected);
+  });
+
+  it('reads several triples separated by semicolons, ignoring spacing', () => {
+    expect(pdaTriples(' a,Z>AZ ;  b,A>ε ')).toEqual([
+      { input: 'a', pop: 'Z', push: 'AZ' },
+      { input: 'b', pop: 'A', push: '' },
+    ]);
+  });
+
+  it('turns epsilon into the absence of a stack operation', () => {
+    expect(pdaTriples('a,ε>ε')).toEqual([{ input: 'a', pop: '', push: '' }]);
+  });
+
+  it('expands typed aliases for epsilon in all three parts', () => {
+    expect(pdaTriples('eps,vazio>epsilon')).toEqual([{ input: EPSILON, pop: '', push: '' }]);
+  });
+
+  it('allows one input symbol to take different stack actions, since a PDA is non-deterministic', () => {
+    expect(pdaTriples('a,Z>AZ; a,Z>ε')).toEqual([
+      { input: 'a', pop: 'Z', push: 'AZ' },
+      { input: 'a', pop: 'Z', push: '' },
+    ]);
+  });
+
+  it('rejects a triple repeated exactly', () => {
+    expect(pdaError('a,Z>A; a,Z>A')).toContain('duas vezes');
+  });
+
+  it('rejects a pop of more than one symbol, which could never match the stack', () => {
+    expect(pdaError('a,AB>C')).toContain('um símbolo por vez');
+  });
+
+  it('rejects an entry with no arrow', () => {
+    expect(pdaError('a,Z,AZ')).toContain('seta');
+  });
+
+  it('rejects an entry missing the popped symbol', () => {
+    expect(pdaError('a>AZ')).toContain('duas partes');
+  });
+
+  it('rejects an empty part instead of guessing it meant epsilon', () => {
+    expect(pdaError('a,>Z')).toContain('vazia');
+  });
+
+  it('reads an empty label as no transitions at all', () => {
+    expect(pdaTriples('')).toEqual([]);
+  });
+});
+
+describe('formatPdaTransitions', () => {
+  it('round-trips what was parsed', () => {
+    expect(formatPdaTransitions(pdaTriples('a,Z>AZ; b,A>ε'))).toBe('a,Z→AZ; b,A→ε');
+  });
+
+  it('renders an absent stack operation as epsilon', () => {
+    expect(formatPdaTransitions([{ input: 'a', pop: '', push: '' }])).toBe(`a,${EPSILON}→${EPSILON}`);
+  });
+
+  it('renders aliases and the typed arrow with their canonical glyphs', () => {
+    expect(formatPdaTransitions(pdaTriples('eps,Z->A'))).toBe(`${EPSILON},Z→A`);
   });
 });

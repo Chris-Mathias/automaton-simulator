@@ -7,10 +7,7 @@ describe('createEmptyAutomaton', () => {
     expect(createEmptyAutomaton('DFA').alphabet).toEqual([]);
     expect(createEmptyAutomaton('TM').alphabet).toEqual([]);
     expect(createEmptyAutomaton('TM').tapeAlphabet).toEqual([]);
-  });
-
-  it('keeps the bottom-of-stack marker on a PDA, whose transitions are picked from dropdowns', () => {
-    expect(createEmptyAutomaton('PDA').stackAlphabet).toEqual(['Z']);
+    expect(createEmptyAutomaton('PDA').stackAlphabet).toEqual([]);
   });
 });
 

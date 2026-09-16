@@ -1,12 +1,7 @@
 import { BLANK, EPSILON, type Automaton, type Transition } from '../types/automaton';
-import { parseTuringTransitions } from './transitionSyntax';
+import { normalizeSymbol, parsePdaTransitions, parseTuringTransitions } from './transitionSyntax';
 
-/** Typed aliases for the epsilon transition, since ε isn't on most keyboards. */
-const EPSILON_ALIASES = new Set(['eps', 'epsilon', 'vazio']);
-
-export function normalizeSymbol(raw: string): string {
-  return EPSILON_ALIASES.has(raw.toLowerCase()) ? EPSILON : raw;
-}
+export { normalizeSymbol };
 
 /** The change a committed transition label makes to the automaton. */
 export interface TransitionEdit {
@@ -24,6 +19,8 @@ export interface TransitionEdit {
   newInputSymbols: string[];
   /** TM only: symbols read or written that the tape alphabet doesn't declare yet. */
   newTapeSymbols: string[];
+  /** PDA only: symbols popped or pushed that the stack alphabet doesn't declare yet. */
+  newStackSymbols: string[];
 }
 
 /** DFA/NFA: the label is a comma-separated list of input symbols. */
@@ -46,6 +43,7 @@ export function planSymbolEdit(automaton: Automaton, from: string, to: string, c
     add: symbols.filter((s) => !existingInputs.has(s)).map((input) => ({ from, to, input })),
     newInputSymbols: symbols.filter((s) => s !== EPSILON && !automaton.alphabet.includes(s)),
     newTapeSymbols: [],
+    newStackSymbols: [],
   };
 }
 
@@ -65,7 +63,14 @@ export function planTuringEdit(
   const existing = automaton.transitions.filter((t) => t.from === from && t.to === to);
   const byInput = new Map(existing.map((t) => [t.input, t]));
 
-  const edit: TransitionEdit = { remove: [], update: [], add: [], newInputSymbols: [], newTapeSymbols: [] };
+  const edit: TransitionEdit = {
+    remove: [],
+    update: [],
+    add: [],
+    newInputSymbols: [],
+    newTapeSymbols: [],
+    newStackSymbols: [],
+  };
   const kept = new Set<string>();
 
   for (const { input, write, move } of parsed.triples) {
@@ -92,4 +97,51 @@ export function planTuringEdit(
   edit.newInputSymbols = [...read].filter((s) => s !== BLANK && !automaton.alphabet.includes(s));
 
   return edit;
+}
+
+/**
+ * PDA: the label is a list of `read,pop→push` triples. Returns null when the
+ * text doesn't parse, so a malformed edit changes nothing at all.
+ *
+ * Unlike the TM, transitions are reconciled by the whole triple rather than by
+ * the symbol read: a PDA may take several different stack actions on the same
+ * symbol, so the symbol alone doesn't identify one. The practical effect is
+ * that editing any part of a triple replaces the transition instead of patching
+ * it — which only its id notices, and ids are used solely to highlight the
+ * transition while a simulation runs.
+ */
+export function planPdaEdit(
+  automaton: Automaton,
+  from: string,
+  to: string,
+  text: string,
+): TransitionEdit | null {
+  const parsed = parsePdaTransitions(text);
+  if (!parsed.ok) return null;
+
+  const existing = automaton.transitions.filter((t) => t.from === from && t.to === to);
+  const keyOf = (input: string, pop: string, push: string) => `${input}|${pop}|${push}`;
+  const existingKeys = new Set(existing.map((t) => keyOf(t.input, t.pop ?? '', t.push ?? '')));
+  const keptKeys = new Set(parsed.triples.map((t) => keyOf(t.input, t.pop, t.push)));
+
+  const stackAlphabet = automaton.stackAlphabet ?? [];
+  // Every character pushed is one stack symbol, matching how the engine
+  // applies a push (`push.split('')`).
+  const usedStackSymbols = new Set(
+    parsed.triples.flatMap((t) => [t.pop, ...t.push.split('')]).filter(Boolean),
+  );
+  const usedInputSymbols = new Set(parsed.triples.map((t) => t.input));
+
+  return {
+    remove: existing
+      .filter((t) => !keptKeys.has(keyOf(t.input, t.pop ?? '', t.push ?? '')))
+      .map((t) => t.id),
+    update: [],
+    add: parsed.triples
+      .filter((t) => !existingKeys.has(keyOf(t.input, t.pop, t.push)))
+      .map(({ input, pop, push }) => ({ from, to, input, pop, push })),
+    newInputSymbols: [...usedInputSymbols].filter((s) => s !== EPSILON && !automaton.alphabet.includes(s)),
+    newTapeSymbols: [],
+    newStackSymbols: [...usedStackSymbols].filter((s) => !stackAlphabet.includes(s)),
+  };
 }

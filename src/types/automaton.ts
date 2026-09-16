@@ -57,10 +57,9 @@ export function createEmptyAutomaton(kind: AutomatonKind, name = 'Novo autômato
     kind,
     // Alphabets start empty and fill themselves in from the symbols typed on
     // transition labels, so a new automaton never carries symbols nobody asked
-    // for. The PDA is the exception: its transitions are picked from dropdowns,
-    // so it needs the conventional bottom-of-stack marker to start with.
+    // for.
     alphabet: [],
-    stackAlphabet: kind === 'PDA' ? ['Z'] : undefined,
+    stackAlphabet: kind === 'PDA' ? [] : undefined,
     tapeAlphabet: kind === 'TM' ? [] : undefined,
     states: [],
     transitions: [],
@@ -82,8 +81,9 @@ export function formatTransitionLabel(kind: AutomatonKind, t: Transition): strin
 
 /** Caption for every transition sharing a pair of states. */
 export function formatTransitionLabels(kind: AutomatonKind, transitions: Transition[]): string {
-  // TM captions already contain commas, so they're separated by semicolons.
-  const separator = kind === 'TM' ? '; ' : ', ';
+  // TM and PDA captions already contain commas, so they're separated by
+  // semicolons — `a, Z→AZ, b, A→ε` gives no way to tell where one ends.
+  const separator = kind === 'TM' || kind === 'PDA' ? '; ' : ', ';
   return transitions.map((t) => formatTransitionLabel(kind, t)).join(separator);
 }
 

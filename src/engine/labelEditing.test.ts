@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { planSymbolEdit, planTuringEdit } from './labelEditing';
+import { planPdaEdit, planSymbolEdit, planTuringEdit } from './labelEditing';
 import { BLANK, EPSILON, createEmptyAutomaton, type Automaton } from '../types/automaton';
 
-function withStates(kind: 'DFA' | 'NFA' | 'TM'): Automaton {
+function withStates(kind: 'DFA' | 'NFA' | 'PDA' | 'TM'): Automaton {
   return {
     ...createEmptyAutomaton(kind),
     startStateId: 'q0',
@@ -112,5 +112,88 @@ describe('planTuringEdit', () => {
 
   it('changes nothing at all when the text does not parse', () => {
     expect(planTuringEdit(withStates('TM'), 'q0', 'q1', 'a,X')).toBeNull();
+  });
+});
+
+describe('planPdaEdit', () => {
+  it('adds a typed triple and declares the symbols it uses', () => {
+    const edit = planPdaEdit(withStates('PDA'), 'q0', 'q1', 'a,Z>AZ')!;
+    expect(edit.add).toEqual([{ from: 'q0', to: 'q1', input: 'a', pop: 'Z', push: 'AZ' }]);
+    expect(edit.newInputSymbols).toEqual(['a']);
+    expect(edit.newStackSymbols).toEqual(['Z', 'A']);
+  });
+
+  it('treats every pushed character as its own stack symbol', () => {
+    expect(planPdaEdit(withStates('PDA'), 'q0', 'q1', 'a,ε>ABC')!.newStackSymbols).toEqual(['A', 'B', 'C']);
+  });
+
+  it('never declares epsilon as a symbol of either alphabet', () => {
+    const edit = planPdaEdit(withStates('PDA'), 'q0', 'q1', 'eps,ε>ε')!;
+    expect(edit.newInputSymbols).toEqual([]);
+    expect(edit.newStackSymbols).toEqual([]);
+    expect(edit.add).toEqual([{ from: 'q0', to: 'q1', input: EPSILON, pop: '', push: '' }]);
+  });
+
+  it('only reports symbols the alphabets are missing', () => {
+    const automaton = { ...withStates('PDA'), alphabet: ['a'], stackAlphabet: ['Z'] };
+    const edit = planPdaEdit(automaton, 'q0', 'q1', 'a,Z>AZ')!;
+    expect(edit.newInputSymbols).toEqual([]);
+    expect(edit.newStackSymbols).toEqual(['A']);
+  });
+
+  it('leaves an unchanged triple alone', () => {
+    const automaton: Automaton = {
+      ...withStates('PDA'),
+      transitions: [{ id: 't1', from: 'q0', to: 'q1', input: 'a', pop: 'Z', push: 'AZ' }],
+    };
+    const edit = planPdaEdit(automaton, 'q0', 'q1', 'a,Z>AZ')!;
+    expect(edit.add).toEqual([]);
+    expect(edit.remove).toEqual([]);
+  });
+
+  it('removes a triple dropped from the label', () => {
+    const automaton: Automaton = {
+      ...withStates('PDA'),
+      transitions: [
+        { id: 't1', from: 'q0', to: 'q1', input: 'a', pop: 'Z', push: 'AZ' },
+        { id: 't2', from: 'q0', to: 'q1', input: 'b', pop: 'A', push: '' },
+      ],
+    };
+    const edit = planPdaEdit(automaton, 'q0', 'q1', 'a,Z>AZ')!;
+    expect(edit.remove).toEqual(['t2']);
+    expect(edit.add).toEqual([]);
+  });
+
+  it('replaces rather than patches when a stack action changes, since the symbol alone is not an identity', () => {
+    const automaton: Automaton = {
+      ...withStates('PDA'),
+      transitions: [{ id: 't1', from: 'q0', to: 'q1', input: 'a', pop: 'Z', push: 'AZ' }],
+    };
+    const edit = planPdaEdit(automaton, 'q0', 'q1', 'a,Z>BZ')!;
+    expect(edit.update).toEqual([]);
+    expect(edit.remove).toEqual(['t1']);
+    expect(edit.add).toEqual([{ from: 'q0', to: 'q1', input: 'a', pop: 'Z', push: 'BZ' }]);
+  });
+
+  it('keeps both branches when one symbol takes two different stack actions', () => {
+    const automaton: Automaton = {
+      ...withStates('PDA'),
+      transitions: [{ id: 't1', from: 'q0', to: 'q1', input: 'a', pop: 'Z', push: 'AZ' }],
+    };
+    const edit = planPdaEdit(automaton, 'q0', 'q1', 'a,Z>AZ; a,Z>ε')!;
+    expect(edit.remove).toEqual([]);
+    expect(edit.add).toEqual([{ from: 'q0', to: 'q1', input: 'a', pop: 'Z', push: '' }]);
+  });
+
+  it('changes nothing at all when the text does not parse', () => {
+    expect(planPdaEdit(withStates('PDA'), 'q0', 'q1', 'a,Z')).toBeNull();
+  });
+
+  it('clears every transition when the label is emptied', () => {
+    const automaton: Automaton = {
+      ...withStates('PDA'),
+      transitions: [{ id: 't1', from: 'q0', to: 'q1', input: 'a', pop: 'Z', push: 'AZ' }],
+    };
+    expect(planPdaEdit(automaton, 'q0', 'q1', '')!.remove).toEqual(['t1']);
   });
 });
