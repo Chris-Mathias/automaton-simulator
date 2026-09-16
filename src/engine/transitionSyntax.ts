@@ -125,6 +125,55 @@ export function formatPdaTransitions(transitions: PdaTriple[]): string {
 
 export type PdaParseResult = { ok: true; triples: PdaTriple[] } | { ok: false; error: string };
 
+type ParseFailure = { ok: false; error: string };
+
+function emptyPartError(entry: string): ParseFailure {
+  return {
+    ok: false,
+    error: `Em "${entry}", nenhuma das partes pode ficar vazia — escreva ${EPSILON} onde não há símbolo.`,
+  };
+}
+
+/** Splits `x→y` on its arrow, rejecting anything but exactly one arrow. */
+function splitArrow(
+  text: string,
+  entry: string,
+  placeholder: string,
+): { ok: true; left: string; right: string } | ParseFailure {
+  const sides = text.split(STACK_ARROW_PATTERN);
+  if (sides.length !== 2) {
+    return {
+      ok: false,
+      error: `"${entry}" precisa de uma seta separando o que sai e o que entra na pilha: ${placeholder}.`,
+    };
+  }
+  return { ok: true, left: sides[0], right: sides[1] };
+}
+
+/**
+ * One `desempilha→empilha` operation, shared by the one- and two-stack parsers
+ * so they never disagree on what a stack action may look like.
+ */
+function parseStackOp(popRaw: string, pushRaw: string, entry: string): { ok: true; pop: string; push: string } | ParseFailure {
+  const pop = normalizeSymbol(popRaw.trim());
+  const push = normalizeSymbol(pushRaw.trim());
+
+  if (!pop || !push) return emptyPartError(entry);
+
+  // The engine pops a single symbol (`stack[0] === pop`) and pushes one per
+  // character (`push.split('')`), so a longer pop could never match anything
+  // that was pushed. Rejecting it here makes that limit visible instead of
+  // producing a transition that silently never fires.
+  if (pop !== EPSILON && pop.length !== 1) {
+    return {
+      ok: false,
+      error: `"${pop}" não serve para desempilhar: sai um símbolo por vez da pilha.`,
+    };
+  }
+
+  return { ok: true, pop: pop === EPSILON ? '' : pop, push: push === EPSILON ? '' : push };
+}
+
 /**
  * Parses what the user typed on a PDA transition label. Unlike the Turing
  * parser, repeating an input symbol is allowed: a PDA is non-deterministic, so
@@ -141,15 +190,10 @@ export function parsePdaTransitions(text: string): PdaParseResult {
   const seen = new Set<string>();
 
   for (const entry of entries) {
-    const sides = entry.split(STACK_ARROW_PATTERN);
-    if (sides.length !== 2) {
-      return {
-        ok: false,
-        error: `"${entry}" precisa de uma seta separando o que sai e o que entra na pilha: ${PDA_SYNTAX_PLACEHOLDER}.`,
-      };
-    }
+    const arrow = splitArrow(entry, entry, PDA_SYNTAX_PLACEHOLDER);
+    if (!arrow.ok) return arrow;
 
-    const readParts = sides[0].split(',').map((part) => part.trim());
+    const readParts = arrow.left.split(',').map((part) => part.trim());
     if (readParts.length !== 2) {
       return {
         ok: false,
@@ -158,32 +202,12 @@ export function parsePdaTransitions(text: string): PdaParseResult {
     }
 
     const input = normalizeSymbol(readParts[0]);
-    const pop = normalizeSymbol(readParts[1]);
-    const push = normalizeSymbol(sides[1].trim());
+    if (!input) return emptyPartError(entry);
 
-    if (!input || !pop || !push) {
-      return {
-        ok: false,
-        error: `Em "${entry}", nenhuma das três partes pode ficar vazia — escreva ${EPSILON} onde não há símbolo.`,
-      };
-    }
+    const op = parseStackOp(readParts[1], arrow.right, entry);
+    if (!op.ok) return op;
 
-    // The engine pops a single symbol (`stack[0] === pop`) and pushes one per
-    // character (`push.split('')`), so a longer pop could never match anything
-    // that was pushed. Rejecting it here makes that limit visible instead of
-    // producing a transition that silently never fires.
-    if (pop !== EPSILON && pop.length !== 1) {
-      return {
-        ok: false,
-        error: `"${pop}" não serve para desempilhar: sai um símbolo por vez da pilha.`,
-      };
-    }
-
-    const triple: PdaTriple = {
-      input,
-      pop: pop === EPSILON ? '' : pop,
-      push: push === EPSILON ? '' : push,
-    };
+    const triple: PdaTriple = { input, pop: op.pop, push: op.push };
 
     const key = `${triple.input}|${triple.pop}|${triple.push}`;
     if (seen.has(key)) {
