@@ -1,4 +1,4 @@
-import type { Automaton } from '../types/automaton';
+import type { Automaton, Transition } from '../types/automaton';
 import { EPSILON } from '../types/automaton';
 import { simulateTuring } from './simulateTuring';
 
@@ -13,6 +13,8 @@ export interface SimulationBranch {
   stateId: string;
   /** Top of stack is stack[0]. Always empty for DFA/NFA/TM. */
   stack: string[];
+  /** 2PDA only: the second stack, top at stack2[0]. */
+  stack2?: string[];
   /** Transitions traversed since the previous step (ε-chain, then the consuming transition, or just ε-chain for step 0). */
   viaTransitionIds: string[];
   /** NFA/PDA: key of the previous step's configuration this one descends from. Undefined on step 0.
@@ -45,8 +47,9 @@ export interface SimulationResult {
   haltReason?: HaltReason;
 }
 
-function branchKey(stateId: string, stack: string[]): string {
-  return `${stateId}::${stack.join('')}`;
+function branchKey(stateId: string, stack: string[], stack2?: string[]): string {
+  const base = `${stateId}::${stack.join('')}`;
+  return stack2 ? `${base}::${stack2.join('')}` : base;
 }
 
 function popMatches(pop: string | undefined, stack: string[]): boolean {
@@ -58,6 +61,29 @@ function applyStackOp(stack: string[], pop: string | undefined, push: string | u
   const rest = pop ? stack.slice(1) : stack.slice();
   const pushed = push ? push.split('') : [];
   return [...pushed, ...rest];
+}
+
+/** Whether every stack the transition pops from has that symbol on top. */
+function stackOpsMatch(automaton: Automaton, t: Transition, branch: SimulationBranch): boolean {
+  if (automaton.kind === 'PDA') return popMatches(t.pop, branch.stack);
+  if (automaton.kind === '2PDA') return popMatches(t.pop, branch.stack) && popMatches(t.pop2, branch.stack2 ?? []);
+  return true;
+}
+
+/** The stacks the transition leaves behind; untouched on automata without one. */
+function applyStackOps(
+  automaton: Automaton,
+  t: Transition,
+  branch: SimulationBranch,
+): Pick<SimulationBranch, 'stack' | 'stack2'> {
+  if (automaton.kind === 'PDA') return { stack: applyStackOp(branch.stack, t.pop, t.push) };
+  if (automaton.kind === '2PDA') {
+    return {
+      stack: applyStackOp(branch.stack, t.pop, t.push),
+      stack2: applyStackOp(branch.stack2 ?? [], t.pop2, t.push2),
+    };
+  }
+  return { stack: branch.stack };
 }
 
 function epsilonClosure(
@@ -80,14 +106,14 @@ function epsilonClosure(
     expansions += 1;
     for (const t of automaton.transitions) {
       if (t.from !== current.stateId || t.input !== EPSILON) continue;
-      if (automaton.kind === 'PDA' && !popMatches(t.pop, current.stack)) continue;
-      const newStack = automaton.kind === 'PDA' ? applyStackOp(current.stack, t.pop, t.push) : current.stack;
-      const key = branchKey(t.to, newStack);
+      if (!stackOpsMatch(automaton, t, current)) continue;
+      const stacks = applyStackOps(automaton, t, current);
+      const key = branchKey(t.to, stacks.stack, stacks.stack2);
       if (visited.has(key)) continue;
       const next: SimulationBranch = {
         key,
         stateId: t.to,
-        stack: newStack,
+        ...stacks,
         viaTransitionIds: [...current.viaTransitionIds, t.id],
         parentKey: current.parentKey,
       };
@@ -108,10 +134,12 @@ export function simulate(automaton: Automaton, input: string): SimulationResult 
 
   const acceptStateIds = new Set(automaton.states.filter((s) => s.isAccept).map((s) => s.id));
 
+  const emptyStacks: Pick<SimulationBranch, 'stack' | 'stack2'> =
+    automaton.kind === '2PDA' ? { stack: [], stack2: [] } : { stack: [] };
   const initial: SimulationBranch = {
-    key: branchKey(automaton.startStateId, []),
+    key: branchKey(automaton.startStateId, emptyStacks.stack, emptyStacks.stack2),
     stateId: automaton.startStateId,
-    stack: [],
+    ...emptyStacks,
     viaTransitionIds: [],
   };
 
@@ -131,12 +159,12 @@ export function simulate(automaton: Automaton, input: string): SimulationResult 
       const before = consumed.length;
       for (const t of automaton.transitions) {
         if (t.from !== branch.stateId || t.input !== symbol) continue;
-        if (automaton.kind === 'PDA' && !popMatches(t.pop, branch.stack)) continue;
-        const newStack = automaton.kind === 'PDA' ? applyStackOp(branch.stack, t.pop, t.push) : branch.stack;
+        if (!stackOpsMatch(automaton, t, branch)) continue;
+        const stacks = applyStackOps(automaton, t, branch);
         consumed.push({
-          key: branchKey(t.to, newStack),
+          key: branchKey(t.to, stacks.stack, stacks.stack2),
           stateId: t.to,
-          stack: newStack,
+          ...stacks,
           viaTransitionIds: [t.id],
           parentKey: branch.key,
         });

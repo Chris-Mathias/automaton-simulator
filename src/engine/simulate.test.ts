@@ -188,6 +188,115 @@ describe('simulate - PDA branch lineage', () => {
   });
 });
 
+/**
+ * aⁿbⁿcⁿ (n ≥ 0): the a's pile up on stack 1, each b moves one over to stack 2,
+ * each c takes one off stack 2. Not context-free, so a single stack couldn't do it.
+ */
+const anbncnTwoStack: Automaton = {
+  schemaVersion: 1,
+  id: '2pda-1',
+  name: 'a^n b^n c^n',
+  kind: '2PDA',
+  alphabet: ['a', 'b', 'c'],
+  stackAlphabet: ['Z', 'A', 'B'],
+  startStateId: 'qs',
+  states: [
+    { id: 'qs', label: 'qs', position: pos(0, 0), isStart: true, isAccept: false },
+    { id: 'q0', label: 'q0', position: pos(100, 0), isStart: false, isAccept: false },
+    { id: 'q1', label: 'q1', position: pos(200, 0), isStart: false, isAccept: false },
+    { id: 'q2', label: 'q2', position: pos(300, 0), isStart: false, isAccept: false },
+    { id: 'qf', label: 'qf', position: pos(400, 0), isStart: false, isAccept: true },
+  ],
+  transitions: [
+    { id: 's1', from: 'qs', to: 'q0', input: EPSILON, pop: '', push: 'Z', pop2: '', push2: 'Z' },
+    { id: 's2', from: 'q0', to: 'q0', input: 'a', pop: '', push: 'A', pop2: '', push2: '' },
+    { id: 's3', from: 'q0', to: 'q1', input: EPSILON, pop: '', push: '', pop2: '', push2: '' },
+    { id: 's4', from: 'q1', to: 'q1', input: 'b', pop: 'A', push: '', pop2: '', push2: 'B' },
+    { id: 's5', from: 'q1', to: 'q2', input: EPSILON, pop: '', push: '', pop2: '', push2: '' },
+    { id: 's6', from: 'q2', to: 'q2', input: 'c', pop: '', push: '', pop2: 'B', push2: '' },
+    { id: 's7', from: 'q2', to: 'qf', input: EPSILON, pop: 'Z', push: '', pop2: 'Z', push2: '' },
+  ],
+};
+
+/** One move that pops from both stacks; `setup` decides what each stack starts with. */
+function bothStacksMachine(setup: { push: string; push2: string }): Automaton {
+  return {
+    schemaVersion: 1,
+    id: '2pda-2',
+    name: 'ambas',
+    kind: '2PDA',
+    alphabet: ['a'],
+    stackAlphabet: ['A', 'B'],
+    startStateId: 'qs',
+    states: [
+      { id: 'qs', label: 'qs', position: pos(0, 0), isStart: true, isAccept: false },
+      { id: 'q0', label: 'q0', position: pos(100, 0), isStart: false, isAccept: false },
+      { id: 'qf', label: 'qf', position: pos(200, 0), isStart: false, isAccept: true },
+    ],
+    transitions: [
+      { id: 'b1', from: 'qs', to: 'q0', input: EPSILON, pop: '', push: setup.push, pop2: '', push2: setup.push2 },
+      { id: 'b2', from: 'q0', to: 'qf', input: 'a', pop: 'A', push: '', pop2: 'B', push2: '' },
+    ],
+  };
+}
+
+describe('simulate - 2PDA (a^n b^n c^n)', () => {
+  it('accepts the empty string and balanced strings', () => {
+    expect(simulate(anbncnTwoStack, '').accepted).toBe(true);
+    expect(simulate(anbncnTwoStack, 'abc').accepted).toBe(true);
+    expect(simulate(anbncnTwoStack, 'aabbcc').accepted).toBe(true);
+    expect(simulate(anbncnTwoStack, 'aaabbbccc').accepted).toBe(true);
+  });
+
+  it('rejects strings a single stack would let through', () => {
+    expect(simulate(anbncnTwoStack, 'aabbc').accepted).toBe(false);
+    expect(simulate(anbncnTwoStack, 'abcc').accepted).toBe(false);
+    expect(simulate(anbncnTwoStack, 'aabbbccc').accepted).toBe(false);
+  });
+
+  it('rejects out-of-order strings', () => {
+    expect(simulate(anbncnTwoStack, 'acb').accepted).toBe(false);
+    expect(simulate(anbncnTwoStack, 'abbc').accepted).toBe(false);
+  });
+
+  it('carries both stacks on every branch and keys the branch by both', () => {
+    const { steps } = simulate(anbncnTwoStack, 'ab');
+    const q1 = steps[2].branches.find((b) => b.stateId === 'q1')!;
+    expect(q1.stack).toEqual(['Z']);
+    expect(q1.stack2).toEqual(['B', 'Z']);
+    expect(q1.key).toBe('q1::Z::BZ');
+  });
+});
+
+describe('simulate - 2PDA stack matching', () => {
+  it('fires only when both pops match', () => {
+    expect(simulate(bothStacksMachine({ push: 'A', push2: 'B' }), 'a').accepted).toBe(true);
+  });
+
+  it('dies when only the first stack matches, and reports the branch as dead', () => {
+    const { accepted, steps } = simulate(bothStacksMachine({ push: 'A', push2: '' }), 'a');
+    expect(accepted).toBe(false);
+    expect(steps[1].branches).toEqual([]);
+    expect(steps[1].deadBranches?.map((b) => b.stateId)).toEqual(['qs', 'q0']);
+  });
+
+  it('dies when only the second stack matches', () => {
+    expect(simulate(bothStacksMachine({ push: '', push2: 'B' }), 'a').accepted).toBe(false);
+  });
+
+  it('keeps configurations apart when only the second stack differs', () => {
+    const forked: Automaton = {
+      ...bothStacksMachine({ push: '', push2: '' }),
+      transitions: [
+        { id: 'f1', from: 'qs', to: 'q0', input: EPSILON, pop: '', push: '', pop2: '', push2: 'X' },
+        { id: 'f2', from: 'qs', to: 'q0', input: EPSILON, pop: '', push: '', pop2: '', push2: 'Y' },
+      ],
+    };
+    const { steps } = simulate(forked, '');
+    expect(steps[0].branches.map((b) => b.key)).toEqual(['qs::::', 'q0::::X', 'q0::::Y']);
+  });
+});
+
 describe('simulate - edge cases', () => {
   it('returns an empty trace when there is no start state', () => {
     const noStart: Automaton = { ...endsIn1Dfa, startStateId: null };
