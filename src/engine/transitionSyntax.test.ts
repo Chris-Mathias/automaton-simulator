@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   formatPdaTransitions,
   formatTuringTransitions,
+  formatTwoStackTransitions,
   normalizeTapeSymbol,
   parsePdaTransitions,
   parseTuringTransitions,
+  parseTwoStackTransitions,
 } from './transitionSyntax';
 import { BLANK, EPSILON } from '../types/automaton';
 
@@ -182,5 +184,101 @@ describe('formatPdaTransitions', () => {
 
   it('renders aliases and the typed arrow with their canonical glyphs', () => {
     expect(formatPdaTransitions(pdaTriples('eps,Z->A'))).toBe(`${EPSILON},Z→A`);
+  });
+});
+
+function twoStackTriples(text: string) {
+  const parsed = parseTwoStackTransitions(text);
+  if (!parsed.ok) throw new Error(`esperava sucesso, veio: ${parsed.error}`);
+  return parsed.triples;
+}
+
+function twoStackError(text: string) {
+  const parsed = parseTwoStackTransitions(text);
+  if (parsed.ok) throw new Error('esperava erro, mas o texto foi aceito');
+  return parsed.error;
+}
+
+describe('parseTwoStackTransitions', () => {
+  it('reads one operation per stack, separated by a bar', () => {
+    expect(twoStackTriples('a, Z>AZ | Z>BZ')).toEqual([{ input: 'a', pop: 'Z', push: 'AZ', pop2: 'Z', push2: 'BZ' }]);
+  });
+
+  it('accepts every spelling of the arrow on either side', () => {
+    const expected = [{ input: 'a', pop: 'Z', push: 'A', pop2: 'B', push2: '' }];
+    expect(twoStackTriples('a,Z>A|B>ε')).toEqual(expected);
+    expect(twoStackTriples('a,Z->A|B->ε')).toEqual(expected);
+    expect(twoStackTriples('a,Z→A|B→ε')).toEqual(expected);
+  });
+
+  it('expands typed aliases for epsilon in all five parts', () => {
+    expect(twoStackTriples('eps, vazio>epsilon | eps>vazio')).toEqual([
+      { input: EPSILON, pop: '', push: '', pop2: '', push2: '' },
+    ]);
+  });
+
+  it('reads several entries separated by semicolons, ignoring spacing', () => {
+    expect(twoStackTriples(' a,ε>A|ε>ε ;  b,A>ε|ε>B ')).toEqual([
+      { input: 'a', pop: '', push: 'A', pop2: '', push2: '' },
+      { input: 'b', pop: 'A', push: '', pop2: '', push2: 'B' },
+    ]);
+  });
+
+  it('allows one input symbol to take different stack actions', () => {
+    expect(twoStackTriples('a,Z>AZ|ε>ε; a,Z>ε|ε>ε')).toHaveLength(2);
+  });
+
+  it('rejects an entry repeated exactly', () => {
+    expect(twoStackError('a,Z>A|ε>ε; a,Z>A|ε>ε')).toContain('duas vezes');
+  });
+
+  it('rejects an entry with no bar', () => {
+    expect(twoStackError('a,Z>AZ')).toContain('barra');
+  });
+
+  it('rejects more than one bar, since there are only two stacks', () => {
+    expect(twoStackError('a,Z>A|Z>B|Z>C')).toContain('duas pilhas');
+  });
+
+  it('rejects a side with no arrow', () => {
+    expect(twoStackError('a,Z,AZ|Z>B')).toContain('seta');
+    expect(twoStackError('a,Z>AZ|Z,B')).toContain('seta');
+  });
+
+  it('rejects a read symbol after the bar, which belongs before the first arrow', () => {
+    expect(twoStackError('a,Z>AZ|b,Z>B')).toContain('depois da barra');
+  });
+
+  it('rejects a first side missing the popped symbol', () => {
+    expect(twoStackError('a>AZ|Z>B')).toContain('duas partes');
+  });
+
+  it('rejects an empty part instead of guessing it meant epsilon', () => {
+    expect(twoStackError('a,>A|Z>B')).toContain('vazia');
+    expect(twoStackError('a,Z>A|>B')).toContain('vazia');
+    expect(twoStackError(',Z>A|Z>B')).toContain('vazia');
+  });
+
+  it('rejects a pop of more than one symbol on either stack', () => {
+    expect(twoStackError('a,AB>C|ε>ε')).toContain('um símbolo por vez');
+    expect(twoStackError('a,ε>ε|AB>C')).toContain('um símbolo por vez');
+  });
+
+  it('reads an empty label as no transitions at all', () => {
+    expect(twoStackTriples('')).toEqual([]);
+  });
+});
+
+describe('formatTwoStackTransitions', () => {
+  it('round-trips what was parsed with canonical glyphs and spacing', () => {
+    expect(formatTwoStackTransitions(twoStackTriples('a,Z->AZ|eps>B; b,A>ε|B>ε'))).toBe(
+      `a, Z→AZ | ${EPSILON}→B; b, A→${EPSILON} | B→${EPSILON}`,
+    );
+  });
+
+  it('renders absent operations on both stacks as epsilon', () => {
+    expect(formatTwoStackTransitions([{ input: 'a', pop: '', push: '', pop2: '', push2: '' }])).toBe(
+      `a, ${EPSILON}→${EPSILON} | ${EPSILON}→${EPSILON}`,
+    );
   });
 });

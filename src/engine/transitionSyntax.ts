@@ -220,3 +220,102 @@ export function parsePdaTransitions(text: string): PdaParseResult {
 
   return { ok: true, triples };
 }
+
+export interface TwoStackTriple {
+  input: string;
+  /** Symbol popped off the first stack. '' means no pop. */
+  pop: string;
+  /** Symbols pushed onto the first stack, top-of-stack first. '' means nothing pushed. */
+  push: string;
+  /** Symbol popped off the second stack. '' means no pop. */
+  pop2: string;
+  /** Symbols pushed onto the second stack, top-of-stack first. '' means nothing pushed. */
+  push2: string;
+}
+
+/** What separates the two stacks' operations on a label. */
+const STACK_SEPARATOR = '|';
+
+export const TWO_STACK_SYNTAX_PLACEHOLDER = 'lê, desempilha>empilha | desempilha>empilha';
+
+/** The editable text for a group of transitions: `a, Z→AZ | ε→B; b, A→ε | B→ε`. */
+export function formatTwoStackTransitions(transitions: TwoStackTriple[]): string {
+  return transitions
+    .map(
+      (t) =>
+        `${t.input || EPSILON}, ${t.pop || EPSILON}${STACK_ARROW}${t.push || EPSILON}` +
+        ` ${STACK_SEPARATOR} ${t.pop2 || EPSILON}${STACK_ARROW}${t.push2 || EPSILON}`,
+    )
+    .join('; ');
+}
+
+export type TwoStackParseResult = { ok: true; triples: TwoStackTriple[] } | { ok: false; error: string };
+
+/**
+ * Parses a two-stack label: the PDA syntax for the first stack, a bar, then
+ * only the operation on the second stack. The symbol read appears once, before
+ * the first arrow. Like the PDA, only an exactly repeated entry is rejected.
+ */
+export function parseTwoStackTransitions(text: string): TwoStackParseResult {
+  const entries = text
+    .split(';')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  const triples: TwoStackTriple[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of entries) {
+    const stacks = entry.split(STACK_SEPARATOR);
+    if (stacks.length < 2) {
+      return {
+        ok: false,
+        error: `Em "${entry}" faltou a barra separando as duas pilhas: ${TWO_STACK_SYNTAX_PLACEHOLDER}.`,
+      };
+    }
+    if (stacks.length > 2) {
+      return { ok: false, error: `Em "${entry}" há mais de uma barra, mas só há duas pilhas.` };
+    }
+
+    const first = splitArrow(stacks[0].trim(), entry, TWO_STACK_SYNTAX_PLACEHOLDER);
+    if (!first.ok) return first;
+
+    const readParts = first.left.split(',').map((part) => part.trim());
+    if (readParts.length !== 2) {
+      return {
+        ok: false,
+        error: `Em "${entry}", antes da primeira seta vêm duas partes separadas por vírgula: o símbolo lido e o desempilhado da pilha 1.`,
+      };
+    }
+
+    const input = normalizeSymbol(readParts[0]);
+    if (!input) return emptyPartError(entry);
+
+    const op1 = parseStackOp(readParts[1], first.right, entry);
+    if (!op1.ok) return op1;
+
+    const second = splitArrow(stacks[1].trim(), entry, TWO_STACK_SYNTAX_PLACEHOLDER);
+    if (!second.ok) return second;
+    if (second.left.includes(',')) {
+      return {
+        ok: false,
+        error: `Em "${entry}", depois da barra vem só a operação da pilha 2: desempilha>empilha.`,
+      };
+    }
+
+    const op2 = parseStackOp(second.left, second.right, entry);
+    if (!op2.ok) return op2;
+
+    const triple: TwoStackTriple = { input, pop: op1.pop, push: op1.push, pop2: op2.pop, push2: op2.push };
+
+    const key = `${triple.input}|${triple.pop}|${triple.push}|${triple.pop2}|${triple.push2}`;
+    if (seen.has(key)) {
+      return { ok: false, error: `"${entry}" aparece duas vezes aqui.` };
+    }
+    seen.add(key);
+
+    triples.push(triple);
+  }
+
+  return { ok: true, triples };
+}
