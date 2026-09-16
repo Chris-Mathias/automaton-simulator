@@ -142,8 +142,8 @@ Nada a fazer.
 ### Criar
 
 `NewAutomatonDialog`: nova opção `2PDA: 'AP2 — Autômato de Duas Pilhas'`.
-`TabBar`: badge `AP2`, com a classe `kind-badge--2PDA` recebendo uma cor
-própria no CSS de tema.
+`TabBar`: badge `AP2`. Os badges não têm cor por tipo hoje, e o AP2 segue
+igual aos demais.
 
 ### Canvas
 
