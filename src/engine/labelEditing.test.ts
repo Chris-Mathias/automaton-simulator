@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { planPdaEdit, planSymbolEdit, planTuringEdit } from './labelEditing';
-import { BLANK, EPSILON, createEmptyAutomaton, type Automaton } from '../types/automaton';
+import { planPdaEdit, planSymbolEdit, planTuringEdit, planTwoStackEdit } from './labelEditing';
+import { BLANK, EPSILON, createEmptyAutomaton, type Automaton, type AutomatonKind } from '../types/automaton';
 
-function withStates(kind: 'DFA' | 'NFA' | 'PDA' | 'TM'): Automaton {
+function withStates(kind: AutomatonKind): Automaton {
   return {
     ...createEmptyAutomaton(kind),
     startStateId: 'q0',
@@ -195,5 +195,74 @@ describe('planPdaEdit', () => {
       transitions: [{ id: 't1', from: 'q0', to: 'q1', input: 'a', pop: 'Z', push: 'AZ' }],
     };
     expect(planPdaEdit(automaton, 'q0', 'q1', '')!.remove).toEqual(['t1']);
+  });
+});
+
+describe('planTwoStackEdit', () => {
+  it('adds a typed entry and declares the symbols of both stacks once', () => {
+    const edit = planTwoStackEdit(withStates('2PDA'), 'q0', 'q1', 'a, Z>AZ | Z>BZ')!;
+    expect(edit.add).toEqual([{ from: 'q0', to: 'q1', input: 'a', pop: 'Z', push: 'AZ', pop2: 'Z', push2: 'BZ' }]);
+    expect(edit.newInputSymbols).toEqual(['a']);
+    expect(edit.newStackSymbols).toEqual(['Z', 'A', 'B']);
+  });
+
+  it('never declares epsilon as a symbol of either alphabet', () => {
+    const edit = planTwoStackEdit(withStates('2PDA'), 'q0', 'q1', 'eps, ε>ε | ε>ε')!;
+    expect(edit.newInputSymbols).toEqual([]);
+    expect(edit.newStackSymbols).toEqual([]);
+    expect(edit.add).toEqual([{ from: 'q0', to: 'q1', input: EPSILON, pop: '', push: '', pop2: '', push2: '' }]);
+  });
+
+  it('only reports symbols the alphabets are missing', () => {
+    const automaton = { ...withStates('2PDA'), alphabet: ['a'], stackAlphabet: ['Z'] };
+    const edit = planTwoStackEdit(automaton, 'q0', 'q1', 'a, Z>AZ | ε>B')!;
+    expect(edit.newInputSymbols).toEqual([]);
+    expect(edit.newStackSymbols).toEqual(['A', 'B']);
+  });
+
+  it('leaves an unchanged entry alone', () => {
+    const automaton: Automaton = {
+      ...withStates('2PDA'),
+      transitions: [{ id: 't1', from: 'q0', to: 'q1', input: 'a', pop: 'Z', push: 'AZ', pop2: '', push2: 'B' }],
+    };
+    const edit = planTwoStackEdit(automaton, 'q0', 'q1', 'a, Z>AZ | ε>B')!;
+    expect(edit.add).toEqual([]);
+    expect(edit.remove).toEqual([]);
+    expect(edit.update).toEqual([]);
+  });
+
+  it('replaces the transition when only the second stack operation changes', () => {
+    const automaton: Automaton = {
+      ...withStates('2PDA'),
+      transitions: [{ id: 't1', from: 'q0', to: 'q1', input: 'a', pop: 'Z', push: 'AZ', pop2: '', push2: 'B' }],
+    };
+    const edit = planTwoStackEdit(automaton, 'q0', 'q1', 'a, Z>AZ | B>ε')!;
+    expect(edit.remove).toEqual(['t1']);
+    expect(edit.add).toEqual([{ from: 'q0', to: 'q1', input: 'a', pop: 'Z', push: 'AZ', pop2: 'B', push2: '' }]);
+  });
+
+  it('removes an entry dropped from the label', () => {
+    const automaton: Automaton = {
+      ...withStates('2PDA'),
+      transitions: [
+        { id: 't1', from: 'q0', to: 'q1', input: 'a', pop: 'Z', push: 'AZ', pop2: '', push2: '' },
+        { id: 't2', from: 'q0', to: 'q1', input: 'b', pop: 'A', push: '', pop2: '', push2: 'B' },
+      ],
+    };
+    const edit = planTwoStackEdit(automaton, 'q0', 'q1', 'a, Z>AZ | ε>ε')!;
+    expect(edit.remove).toEqual(['t2']);
+    expect(edit.add).toEqual([]);
+  });
+
+  it('changes nothing at all when the text does not parse', () => {
+    expect(planTwoStackEdit(withStates('2PDA'), 'q0', 'q1', 'a, Z>AZ')).toBeNull();
+  });
+
+  it('clears every transition when the label is emptied', () => {
+    const automaton: Automaton = {
+      ...withStates('2PDA'),
+      transitions: [{ id: 't1', from: 'q0', to: 'q1', input: 'a', pop: 'Z', push: 'AZ', pop2: '', push2: '' }],
+    };
+    expect(planTwoStackEdit(automaton, 'q0', 'q1', '')!.remove).toEqual(['t1']);
   });
 });

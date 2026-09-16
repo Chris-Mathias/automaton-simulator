@@ -1,5 +1,5 @@
 import { BLANK, EPSILON, type Automaton, type Transition } from '../types/automaton';
-import { normalizeSymbol, parsePdaTransitions, parseTuringTransitions } from './transitionSyntax';
+import { normalizeSymbol, parsePdaTransitions, parseTuringTransitions, parseTwoStackTransitions } from './transitionSyntax';
 
 export { normalizeSymbol };
 
@@ -19,7 +19,7 @@ export interface TransitionEdit {
   newInputSymbols: string[];
   /** TM only: symbols read or written that the tape alphabet doesn't declare yet. */
   newTapeSymbols: string[];
-  /** PDA only: symbols popped or pushed that the stack alphabet doesn't declare yet. */
+  /** PDA/2PDA only: symbols popped or pushed that the shared stack alphabet doesn't declare yet. */
   newStackSymbols: string[];
 }
 
@@ -99,6 +99,21 @@ export function planTuringEdit(
   return edit;
 }
 
+function undeclaredInputSymbols(automaton: Automaton, inputs: string[]): string[] {
+  return [...new Set(inputs)].filter((s) => s !== EPSILON && !automaton.alphabet.includes(s));
+}
+
+/**
+ * Every character pushed is one stack symbol, matching how the engine applies
+ * a push (`push.split('')`). Shared by the one- and two-stack planners since
+ * both feed the same stack alphabet.
+ */
+function undeclaredStackSymbols(automaton: Automaton, ops: { pop: string; push: string }[]): string[] {
+  const stackAlphabet = automaton.stackAlphabet ?? [];
+  const used = new Set(ops.flatMap((op) => [op.pop, ...op.push.split('')]).filter(Boolean));
+  return [...used].filter((s) => !stackAlphabet.includes(s));
+}
+
 /**
  * PDA: the label is a list of `read,pop→push` triples. Returns null when the
  * text doesn't parse, so a malformed edit changes nothing at all.
@@ -124,14 +139,6 @@ export function planPdaEdit(
   const existingKeys = new Set(existing.map((t) => keyOf(t.input, t.pop ?? '', t.push ?? '')));
   const keptKeys = new Set(parsed.triples.map((t) => keyOf(t.input, t.pop, t.push)));
 
-  const stackAlphabet = automaton.stackAlphabet ?? [];
-  // Every character pushed is one stack symbol, matching how the engine
-  // applies a push (`push.split('')`).
-  const usedStackSymbols = new Set(
-    parsed.triples.flatMap((t) => [t.pop, ...t.push.split('')]).filter(Boolean),
-  );
-  const usedInputSymbols = new Set(parsed.triples.map((t) => t.input));
-
   return {
     remove: existing
       .filter((t) => !keptKeys.has(keyOf(t.input, t.pop ?? '', t.push ?? '')))
@@ -140,8 +147,46 @@ export function planPdaEdit(
     add: parsed.triples
       .filter((t) => !existingKeys.has(keyOf(t.input, t.pop, t.push)))
       .map(({ input, pop, push }) => ({ from, to, input, pop, push })),
-    newInputSymbols: [...usedInputSymbols].filter((s) => s !== EPSILON && !automaton.alphabet.includes(s)),
+    newInputSymbols: undeclaredInputSymbols(automaton, parsed.triples.map((t) => t.input)),
     newTapeSymbols: [],
-    newStackSymbols: [...usedStackSymbols].filter((s) => !stackAlphabet.includes(s)),
+    newStackSymbols: undeclaredStackSymbols(automaton, parsed.triples),
+  };
+}
+
+/**
+ * 2PDA: the label is a list of `read, pop→push | pop→push` entries. Reconciled
+ * by the whole entry, like the PDA: editing any of the four stack parts
+ * replaces the transition rather than patching it.
+ */
+export function planTwoStackEdit(
+  automaton: Automaton,
+  from: string,
+  to: string,
+  text: string,
+): TransitionEdit | null {
+  const parsed = parseTwoStackTransitions(text);
+  if (!parsed.ok) return null;
+
+  const existing = automaton.transitions.filter((t) => t.from === from && t.to === to);
+  const keyOf = (t: Pick<Transition, 'input' | 'pop' | 'push' | 'pop2' | 'push2'>) =>
+    `${t.input}|${t.pop ?? ''}|${t.push ?? ''}|${t.pop2 ?? ''}|${t.push2 ?? ''}`;
+  const existingKeys = new Set(existing.map(keyOf));
+  const keptKeys = new Set(parsed.triples.map(keyOf));
+
+  return {
+    remove: existing.filter((t) => !keptKeys.has(keyOf(t))).map((t) => t.id),
+    update: [],
+    add: parsed.triples
+      .filter((t) => !existingKeys.has(keyOf(t)))
+      .map(({ input, pop, push, pop2, push2 }) => ({ from, to, input, pop, push, pop2, push2 })),
+    newInputSymbols: undeclaredInputSymbols(automaton, parsed.triples.map((t) => t.input)),
+    newTapeSymbols: [],
+    newStackSymbols: undeclaredStackSymbols(
+      automaton,
+      parsed.triples.flatMap((t) => [
+        { pop: t.pop, push: t.push },
+        { pop: t.pop2, push: t.push2 },
+      ]),
+    ),
   };
 }
