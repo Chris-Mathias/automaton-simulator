@@ -1,4 +1,4 @@
-export type AutomatonKind = 'DFA' | 'NFA' | 'PDA' | 'TM';
+export type AutomatonKind = 'DFA' | 'NFA' | 'PDA' | '2PDA' | 'TM';
 
 export const EPSILON = 'ε';
 
@@ -9,6 +9,11 @@ export const BLANK = '␣';
 export type TapeMove = 'L' | 'R' | 'S';
 
 export const TAPE_MOVE_LABELS: Record<TapeMove, string> = { L: 'E', R: 'D', S: 'P' };
+
+/** Kinds whose configurations carry a stack: the one-stack PDA and the two-stack 2PDA. */
+export function hasStack(kind: AutomatonKind): boolean {
+  return kind === 'PDA' || kind === '2PDA';
+}
 
 export interface AutomatonState {
   id: string;
@@ -28,6 +33,10 @@ export interface Transition {
   pop?: string;
   /** PDA only: symbols pushed onto the stack, top-of-stack first. '' means nothing pushed. */
   push?: string;
+  /** 2PDA only: symbol popped off the second stack. '' means no pop. */
+  pop2?: string;
+  /** 2PDA only: symbols pushed onto the second stack, top-of-stack first. '' means nothing pushed. */
+  push2?: string;
   /** TM only: symbol written under the head. Undefined/'' keeps the symbol that was read. */
   write?: string;
   /** TM only: where the head moves after writing. */
@@ -59,7 +68,7 @@ export function createEmptyAutomaton(kind: AutomatonKind, name = 'Novo autômato
     // transition labels, so a new automaton never carries symbols nobody asked
     // for.
     alphabet: [],
-    stackAlphabet: kind === 'PDA' ? [] : undefined,
+    stackAlphabet: hasStack(kind) ? [] : undefined,
     tapeAlphabet: kind === 'TM' ? [] : undefined,
     states: [],
     transitions: [],
@@ -70,6 +79,9 @@ export function createEmptyAutomaton(kind: AutomatonKind, name = 'Novo autômato
 /** Caption for a single transition: `a` (AFD/AFN), `a, Z→AZ` (PDA), `a,A,D` (MT). */
 export function formatTransitionLabel(kind: AutomatonKind, t: Transition): string {
   if (kind === 'PDA') return `${t.input}, ${t.pop || EPSILON}→${t.push || EPSILON}`;
+  if (kind === '2PDA') {
+    return `${t.input}, ${t.pop || EPSILON}→${t.push || EPSILON} | ${t.pop2 || EPSILON}→${t.push2 || EPSILON}`;
+  }
   // On a TM the caption is exactly what you type into it, so editing a label
   // never means translating between two notations.
   if (kind === 'TM') {
@@ -83,7 +95,7 @@ export function formatTransitionLabel(kind: AutomatonKind, t: Transition): strin
 export function formatTransitionLabels(kind: AutomatonKind, transitions: Transition[]): string {
   // TM and PDA captions already contain commas, so they're separated by
   // semicolons — `a, Z→AZ, b, A→ε` gives no way to tell where one ends.
-  const separator = kind === 'TM' || kind === 'PDA' ? '; ' : ', ';
+  const separator = kind === 'TM' || hasStack(kind) ? '; ' : ', ';
   return transitions.map((t) => formatTransitionLabel(kind, t)).join(separator);
 }
 
@@ -94,7 +106,7 @@ export function isAutomaton(value: unknown): value is Automaton {
     v.schemaVersion === 1 &&
     typeof v.id === 'string' &&
     typeof v.name === 'string' &&
-    (v.kind === 'DFA' || v.kind === 'NFA' || v.kind === 'PDA' || v.kind === 'TM') &&
+    (v.kind === 'DFA' || v.kind === 'NFA' || v.kind === 'PDA' || v.kind === '2PDA' || v.kind === 'TM') &&
     Array.isArray(v.alphabet) &&
     Array.isArray(v.states) &&
     Array.isArray(v.transitions)
