@@ -15,6 +15,9 @@ export interface SimulationBranch {
   stack: string[];
   /** Transitions traversed since the previous step (ε-chain, then the consuming transition, or just ε-chain for step 0). */
   viaTransitionIds: string[];
+  /** NFA/PDA: key of the previous step's configuration this one descends from. Undefined on step 0.
+   *  When two configurations reach the same one, the first to get there is kept. */
+  parentKey?: string;
   /** TM only: the finite window of the tape that has been visited. Cells outside it are blank. */
   tape?: string[];
   /** TM only: head index into `tape`. Always within bounds — the window grows before the head leaves it. */
@@ -26,6 +29,8 @@ export interface SimulationStep {
    *  For a TM this is the symbol read by the transition that produced this configuration. */
   symbolConsumed: string | null;
   branches: SimulationBranch[];
+  /** NFA/PDA: configurations of the previous step with no move on `symbolConsumed` — the branches that died here. */
+  deadBranches?: SimulationBranch[];
 }
 
 /** TM only: why the machine stopped running. */
@@ -84,6 +89,7 @@ function epsilonClosure(
         stateId: t.to,
         stack: newStack,
         viaTransitionIds: [...current.viaTransitionIds, t.id],
+        parentKey: current.parentKey,
       };
       visited.set(key, next);
       queue.push(next);
@@ -120,7 +126,9 @@ export function simulate(automaton: Automaton, input: string): SimulationResult 
     }
 
     const consumed: SimulationBranch[] = [];
+    const dead: SimulationBranch[] = [];
     for (const branch of current) {
+      const before = consumed.length;
       for (const t of automaton.transitions) {
         if (t.from !== branch.stateId || t.input !== symbol) continue;
         if (automaton.kind === 'PDA' && !popMatches(t.pop, branch.stack)) continue;
@@ -130,8 +138,10 @@ export function simulate(automaton: Automaton, input: string): SimulationResult 
           stateId: t.to,
           stack: newStack,
           viaTransitionIds: [t.id],
+          parentKey: branch.key,
         });
       }
+      if (consumed.length === before) dead.push(branch);
     }
 
     let next = epsilonClosure(automaton, consumed);
@@ -140,7 +150,7 @@ export function simulate(automaton: Automaton, input: string): SimulationResult 
       truncated = true;
     }
 
-    steps.push({ symbolConsumed: symbol, branches: next });
+    steps.push({ symbolConsumed: symbol, branches: next, deadBranches: dead });
     current = next;
     if (current.length === 0) break;
   }

@@ -132,6 +132,62 @@ describe('simulate - PDA (a^n b^n)', () => {
   });
 });
 
+/** Even-length palindromes w wᴿ: guesses the middle with an ε-move, so every step branches. */
+const palindromePda: Automaton = {
+  schemaVersion: 1,
+  id: 'pda-2',
+  name: 'w wᴿ',
+  kind: 'PDA',
+  alphabet: ['a', 'b'],
+  stackAlphabet: ['Z', 'a', 'b'],
+  startStateId: 'q0',
+  states: [
+    { id: 'q0', label: 'q0', position: pos(0, 0), isStart: true, isAccept: false },
+    { id: 'q1', label: 'q1', position: pos(100, 0), isStart: false, isAccept: false },
+    { id: 'q2', label: 'q2', position: pos(200, 0), isStart: false, isAccept: false },
+    { id: 'q3', label: 'q3', position: pos(300, 0), isStart: false, isAccept: true },
+  ],
+  transitions: [
+    { id: 'p1', from: 'q0', to: 'q1', input: EPSILON, pop: '', push: 'Z' },
+    { id: 'p2', from: 'q1', to: 'q1', input: 'a', pop: '', push: 'a' },
+    { id: 'p3', from: 'q1', to: 'q1', input: 'b', pop: '', push: 'b' },
+    { id: 'p4', from: 'q1', to: 'q2', input: EPSILON, pop: '', push: '' },
+    { id: 'p5', from: 'q2', to: 'q2', input: 'a', pop: 'a', push: '' },
+    { id: 'p6', from: 'q2', to: 'q2', input: 'b', pop: 'b', push: '' },
+    { id: 'p7', from: 'q2', to: 'q3', input: EPSILON, pop: 'Z', push: '' },
+  ],
+};
+
+describe('simulate - PDA branch lineage', () => {
+  it('reports the configurations with no move on the symbol read as dead', () => {
+    const { steps } = simulate(palindromePda, 'abba');
+    expect(steps[0].deadBranches).toBeUndefined();
+    expect(steps[1].deadBranches?.map((b) => b.key)).toEqual(['q0::', 'q2::Z', 'q3::']);
+    expect(steps[2].deadBranches?.map((b) => b.key)).toEqual(['q2::aZ']);
+    expect(steps[3].deadBranches).toEqual([]);
+  });
+
+  it('links every configuration to the one it came from, through ε-moves too', () => {
+    const { steps, accepted } = simulate(palindromePda, 'abba');
+    expect(accepted).toBe(true);
+    expect(steps[0].branches.every((b) => b.parentKey === undefined)).toBe(true);
+    // q1 pushes 'a' on reading it; q2 is reached from that by the ε guess, but still descends from q1::Z.
+    expect(steps[1].branches.map((b) => [b.key, b.parentKey])).toEqual([
+      ['q1::aZ', 'q1::Z'],
+      ['q2::aZ', 'q1::Z'],
+    ]);
+    // The accepting branch popped its way down from q2::aZ.
+    expect(steps[4].branches.find((b) => b.stateId === 'q3')?.parentKey).toBe('q2::aZ');
+  });
+
+  it('lists every surviving branch as dead when the whole run dies', () => {
+    const { steps } = simulate(anbnPda, 'ba');
+    const last = steps.at(-1)!;
+    expect(last.branches).toEqual([]);
+    expect(last.deadBranches?.map((b) => b.stateId).sort()).toEqual(['q0', 'q1', 'qf', 'qs']);
+  });
+});
+
 describe('simulate - edge cases', () => {
   it('returns an empty trace when there is no start state', () => {
     const noStart: Automaton = { ...endsIn1Dfa, startStateId: null };
