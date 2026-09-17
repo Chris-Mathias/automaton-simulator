@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { CSSProperties } from 'react';
 import { activeDocument, useAutomatonStore } from '../../store/useAutomatonStore';
-import { formatTransitionLabel, type Automaton } from '../../types/automaton';
+import { formatTransitionLabel, hasStack, type Automaton } from '../../types/automaton';
 import type { SimulationBranch } from '../../engine/simulate';
 import './StackStrip.css';
 
@@ -31,32 +31,24 @@ function stackDiff(parent: string[] | undefined, stack: string[]) {
   return { popped: parent.slice(0, parent.length - kept), pushed: stack.length - kept };
 }
 
-interface CardProps {
-  automaton: Automaton;
-  branch: SimulationBranch;
-  parent?: SimulationBranch;
-  variant: 'live' | 'accept' | 'dead';
+interface ColumnProps {
+  stack: string[];
+  /** The same stack on the configuration this one came from; drives the pop/push animation. */
+  parent?: string[];
+  animate: boolean;
+  /** Shown above the column when the card holds more than one stack. */
+  label?: string;
 }
 
-function StackCard({ automaton, branch, parent, variant }: CardProps) {
-  const label = automaton.states.find((s) => s.id === branch.stateId)?.label ?? '?';
-  const { popped, pushed } = variant === 'dead' ? { popped: [], pushed: 0 } : stackDiff(parent?.stack, branch.stack);
+function StackColumn({ stack, parent, animate, label }: ColumnProps) {
+  const { popped, pushed } = animate ? stackDiff(parent, stack) : { popped: [], pushed: 0 };
 
-  const shown = branch.stack.length > MAX_DEPTH ? branch.stack.slice(0, MAX_DEPTH - 1) : branch.stack;
-  const hidden = branch.stack.length - shown.length;
-
-  const via =
-    variant === 'dead'
-      ? []
-      : branch.viaTransitionIds
-          .map((id) => automaton.transitions.find((t) => t.id === id))
-          .filter((t) => t !== undefined)
-          .map((t) => formatTransitionLabel('PDA', t));
+  const shown = stack.length > MAX_DEPTH ? stack.slice(0, MAX_DEPTH - 1) : stack;
+  const hidden = stack.length - shown.length;
 
   return (
-    <div className={`stack-card stack-card--${variant}`}>
-      <span className="stack-card__state mono">{label}</span>
-
+    <div className="stack-card__column">
+      {label && <span className="stack-card__stack-label mono">{label}</span>}
       <div className="stack-card__stack">
         {popped.map((symbol, i) => (
           <span key={`p${i}`} className="stack-card__block mono is-popped">
@@ -75,7 +67,39 @@ function StackCard({ automaton, branch, parent, variant }: CardProps) {
           </span>
         ))}
         {hidden > 0 && <span className="stack-card__block stack-card__more mono">+{hidden}</span>}
-        {branch.stack.length === 0 && popped.length === 0 && <span className="stack-card__empty">vazia</span>}
+        {stack.length === 0 && popped.length === 0 && <span className="stack-card__empty">vazia</span>}
+      </div>
+    </div>
+  );
+}
+
+interface CardProps {
+  automaton: Automaton;
+  branch: SimulationBranch;
+  parent?: SimulationBranch;
+  variant: 'live' | 'accept' | 'dead';
+}
+
+function StackCard({ automaton, branch, parent, variant }: CardProps) {
+  const label = automaton.states.find((s) => s.id === branch.stateId)?.label ?? '?';
+  const twoStacks = automaton.kind === '2PDA';
+  const animate = variant !== 'dead';
+
+  const via =
+    variant === 'dead'
+      ? []
+      : branch.viaTransitionIds
+          .map((id) => automaton.transitions.find((t) => t.id === id))
+          .filter((t) => t !== undefined)
+          .map((t) => formatTransitionLabel(automaton.kind, t));
+
+  return (
+    <div className={`stack-card stack-card--${variant}`}>
+      <span className="stack-card__state mono">{label}</span>
+
+      <div className="stack-card__stacks">
+        <StackColumn stack={branch.stack} parent={parent?.stack} animate={animate} label={twoStacks ? '1' : undefined} />
+        {twoStacks && <StackColumn stack={branch.stack2 ?? []} parent={parent?.stack2} animate={animate} label="2" />}
       </div>
 
       {variant === 'dead' ? (
@@ -96,10 +120,10 @@ function StackCard({ automaton, branch, parent, variant }: CardProps) {
 /**
  * The pushdown automaton's counterpart to the Turing tape strip: the input
  * tape slides under a fixed head, and every configuration the nondeterministic
- * run holds at this step is drawn side by side as a card with its own stack —
- * new ones animate in with the symbols they pushed, and the ones that had no
- * move on the symbol just read stay behind greyed out, so the branching is
- * visible rather than summarised.
+ * run holds at this step is drawn side by side as a card with its own stack,
+ * or its two stacks in a 2PDA — new ones animate in with the symbols they
+ * pushed, and the ones that had no move on the symbol just read stay behind
+ * greyed out, so the branching is visible rather than summarised.
  */
 export function StackStrip() {
   const automaton = useAutomatonStore((s) => activeDocument(s).automaton);
@@ -112,12 +136,12 @@ export function StackStrip() {
   const depth = useMemo(() => {
     const deepest = Math.max(
       1,
-      ...(simulationResult?.steps.flatMap((s) => s.branches.map((b) => b.stack.length)) ?? []),
+      ...(simulationResult?.steps.flatMap((s) => s.branches.flatMap((b) => [b.stack.length, b.stack2?.length ?? 0])) ?? []),
     );
     return Math.min(deepest, MAX_DEPTH);
   }, [simulationResult]);
 
-  if (automaton.kind !== 'PDA' || !simulationResult) return null;
+  if (!hasStack(automaton.kind) || !simulationResult) return null;
   const step = simulationResult.steps[stepIndex];
   if (!step) return null;
 

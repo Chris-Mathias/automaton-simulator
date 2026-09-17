@@ -29,6 +29,50 @@ function palindromes(): Automaton {
   };
 }
 
+/** aⁿbⁿcⁿ on two stacks: a's pile on stack 1, each b moves one to stack 2, each c takes one off. */
+function anbncn(): Automaton {
+  return {
+    ...createEmptyAutomaton('2PDA'),
+    alphabet: ['a', 'b', 'c'],
+    stackAlphabet: ['Z', 'A', 'B'],
+    startStateId: 'qs',
+    states: [
+      { id: 'qs', label: 'qs', position: { x: 0, y: 0 }, isStart: true, isAccept: false },
+      { id: 'q0', label: 'q0', position: { x: 100, y: 0 }, isStart: false, isAccept: false },
+      { id: 'q1', label: 'q1', position: { x: 200, y: 0 }, isStart: false, isAccept: false },
+      { id: 'q2', label: 'q2', position: { x: 300, y: 0 }, isStart: false, isAccept: false },
+      { id: 'qf', label: 'qf', position: { x: 400, y: 0 }, isStart: false, isAccept: true },
+    ],
+    transitions: [
+      { id: 's1', from: 'qs', to: 'q0', input: EPSILON, pop: '', push: 'Z', pop2: '', push2: 'Z' },
+      { id: 's2', from: 'q0', to: 'q0', input: 'a', pop: '', push: 'A', pop2: '', push2: '' },
+      { id: 's3', from: 'q0', to: 'q1', input: EPSILON, pop: '', push: '', pop2: '', push2: '' },
+      { id: 's4', from: 'q1', to: 'q1', input: 'b', pop: 'A', push: '', pop2: '', push2: 'B' },
+      { id: 's5', from: 'q1', to: 'q2', input: EPSILON, pop: '', push: '', pop2: '', push2: '' },
+      { id: 's6', from: 'q2', to: 'q2', input: 'c', pop: '', push: '', pop2: 'B', push2: '' },
+      { id: 's7', from: 'q2', to: 'qf', input: EPSILON, pop: 'Z', push: '', pop2: 'Z', push2: '' },
+    ],
+  };
+}
+
+/** One entry per stack column of a card: the blocks it shows, and what animated. */
+function readColumns(card: Element) {
+  return [...card.querySelectorAll<HTMLElement>('.stack-card__stack')].map((col) => ({
+    stack: [...col.querySelectorAll('.stack-card__block:not(.is-popped)')].map((b) => b.textContent),
+    pushed: [...col.querySelectorAll('.stack-card__block.is-pushed')].map((b) => b.textContent),
+    popped: [...col.querySelectorAll('.stack-card__block.is-popped')].map((b) => b.textContent),
+    empty: col.querySelector('.stack-card__empty') !== null,
+  }));
+}
+
+function liveCard(container: HTMLElement, state: string) {
+  const card = [...container.querySelectorAll('.stack-card--live')].find(
+    (c) => c.querySelector('.stack-card__state')?.textContent === state,
+  );
+  if (!card) throw new Error(`nenhum cartão ativo para ${state}`);
+  return card;
+}
+
 function runOn(automaton: Automaton, input: string) {
   useAutomatonStore.getState().openTab(automaton);
   useAutomatonStore.getState().setSimulationInput(input);
@@ -99,5 +143,49 @@ describe('StackStrip', () => {
     goTo(4);
     expect(readCards(container, '.stack-card--accept').map((c) => c.state)).toEqual(['q3']);
     expect(container.querySelector('.stack-strip__end')?.classList.contains('is-head')).toBe(true);
+  });
+});
+
+describe('StackStrip - two stacks', () => {
+  it('draws one column per stack, labelled 1 and 2', () => {
+    runOn(anbncn(), 'abc');
+    const { container } = render(<StackStrip />);
+    goTo(2);
+    const card = liveCard(container, 'q1');
+    expect([...card.querySelectorAll('.stack-card__stack-label')].map((l) => l.textContent)).toEqual(['1', '2']);
+    expect(readColumns(card).map((c) => c.stack)).toEqual([['Z'], ['B', 'Z']]);
+  });
+
+  it('keeps a single unlabelled column on a one-stack PDA', () => {
+    runOn(palindromes(), 'abba');
+    const { container } = render(<StackStrip />);
+    const card = liveCard(container, 'q1');
+    expect(card.querySelectorAll('.stack-card__stack')).toHaveLength(1);
+    expect(card.querySelectorAll('.stack-card__stack-label')).toHaveLength(0);
+  });
+
+  it('animates each stack against its own parent', () => {
+    runOn(anbncn(), 'abc');
+    const { container } = render(<StackStrip />);
+    goTo(2);
+    // Reading 'b' popped A off stack 1 and pushed B onto stack 2.
+    expect(readColumns(liveCard(container, 'q1'))).toMatchObject([
+      { popped: ['A'], pushed: [] },
+      { popped: [], pushed: ['B'] },
+    ]);
+  });
+
+  it('shows an empty second stack as empty', () => {
+    runOn(anbncn(), 'abc');
+    const { container } = render(<StackStrip />);
+    // At step 0 the ε-closure already reached qf by popping Z off both stacks.
+    expect(readColumns(liveCard(container, 'qf')).map((c) => c.empty)).toEqual([true, true]);
+  });
+
+  it('marks the accepting configuration once the whole input is read', () => {
+    runOn(anbncn(), 'abc');
+    const { container } = render(<StackStrip />);
+    goTo(3);
+    expect(readCards(container, '.stack-card--accept').map((c) => c.state)).toEqual(['qf']);
   });
 });
