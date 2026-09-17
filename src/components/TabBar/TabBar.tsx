@@ -3,7 +3,7 @@ import { useAutomatonStore } from '../../store/useAutomatonStore';
 import { NewAutomatonDialog } from '../Dialogs/NewAutomatonDialog';
 import './TabBar.css';
 
-const KIND_BADGE: Record<string, string> = { DFA: 'AFD', NFA: 'AFN', PDA: 'PDA', TM: 'MT' };
+const KIND_BADGE: Record<string, string> = { DFA: 'AFD', NFA: 'AFN', PDA: 'PDA', '2PDA': 'AP2', TM: 'MT' };
 
 export function TabBar() {
   const documents = useAutomatonStore((s) => s.documents);

@@ -28,4 +28,14 @@ describe('Toolbar alphabet fields', () => {
     act(() => useAutomatonStore.getState().setTapeAlphabet(['X', 'a']));
     expect(field.value).toBe('X, a');
   });
+
+  it('shows the stack alphabet field for a two-stack automaton and resyncs it', () => {
+    act(() => useAutomatonStore.getState().openTab(createEmptyAutomaton('2PDA')));
+    render(<Toolbar />);
+    const field = screen.getByLabelText('Alfabeto da pilha', { selector: 'input' }) as HTMLInputElement;
+    expect(field.value).toBe('');
+
+    act(() => useAutomatonStore.getState().setStackAlphabet(['A', 'Z']));
+    expect(field.value).toBe('A, Z');
+  });
 });

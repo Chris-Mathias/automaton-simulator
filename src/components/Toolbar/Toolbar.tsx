@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { activeDocument, useAutomatonStore } from '../../store/useAutomatonStore';
 import { convertNfaToDfa } from '../../engine/convertNfaToDfa';
 import { exportAutomatonToFile, importAutomatonFromFile } from '../../persistence/exportImport';
-import { BLANK } from '../../types/automaton';
+import { BLANK, hasStack } from '../../types/automaton';
 import { normalizeTapeSymbol } from '../../engine/transitionSyntax';
 import './Toolbar.css';
 
@@ -101,7 +101,7 @@ export function Toolbar() {
             onBlur={() => setAlphabet(parseSymbols(alphabetDraft))}
           />
         </label>
-        {automaton.kind === 'PDA' && (
+        {hasStack(automaton.kind) && (
           <label className="toolbar__field">
             <span>Alfabeto da pilha</span>
             <input
