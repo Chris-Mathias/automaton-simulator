@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import { activeDocument, useAutomatonStore } from '../../store/useAutomatonStore';
-import { BLANK } from '../../types/automaton';
+import { BLANK, hasStack } from '../../types/automaton';
 import type { SimulationResult } from '../../engine/simulate';
 
 const SPEED_MIN = 150;
@@ -154,8 +154,11 @@ export function SimulatePanel() {
                 {currentStep?.branches.map((b) => (
                   <div key={b.key} className={`branch-chip ${stateById.get(b.stateId)?.isAccept ? 'branch-chip--accept' : ''}`}>
                     <span className="mono">{stateById.get(b.stateId)?.label ?? b.stateId}</span>
-                    {automaton.kind === 'PDA' && (
+                    {hasStack(automaton.kind) && (
                       <span className="branch-chip__stack mono">[{b.stack.join(' ') || 'vazia'}]</span>
+                    )}
+                    {automaton.kind === '2PDA' && (
+                      <span className="branch-chip__stack mono">[{(b.stack2 ?? []).join(' ') || 'vazia'}]</span>
                     )}
                   </div>
                 ))}

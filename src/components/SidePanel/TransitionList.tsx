@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { activeDocument, useAutomatonStore } from '../../store/useAutomatonStore';
-import { EPSILON, TAPE_MOVE_LABELS, type TapeMove } from '../../types/automaton';
+import { EPSILON, TAPE_MOVE_LABELS, hasStack, type TapeMove } from '../../types/automaton';
 import { MOVE_OPTIONS, tapeSymbolOptions } from './tapeOptions';
 
 export function TransitionList() {
@@ -9,7 +9,8 @@ export function TransitionList() {
   const removeTransition = useAutomatonStore((s) => s.removeTransition);
   const addTransition = useAutomatonStore((s) => s.addTransition);
 
-  const isPda = automaton.kind === 'PDA';
+  const hasStacks = hasStack(automaton.kind);
+  const isTwoStack = automaton.kind === '2PDA';
   const isTm = automaton.kind === 'TM';
   const symbolOptions = isTm
     ? tapeSymbolOptions(automaton.tapeAlphabet)
@@ -22,6 +23,8 @@ export function TransitionList() {
   const [draftInput, setDraftInput] = useState('');
   const [draftPop, setDraftPop] = useState('');
   const [draftPush, setDraftPush] = useState('');
+  const [draftPop2, setDraftPop2] = useState('');
+  const [draftPush2, setDraftPush2] = useState('');
   const [draftWrite, setDraftWrite] = useState('');
   const [draftMove, setDraftMove] = useState<TapeMove>('R');
 
@@ -35,12 +38,15 @@ export function TransitionList() {
       from: draftFrom,
       to: draftTo,
       input: draftInput,
-      ...(isPda ? { pop: draftPop, push: draftPush } : {}),
+      ...(hasStacks ? { pop: draftPop, push: draftPush } : {}),
+      ...(isTwoStack ? { pop2: draftPop2, push2: draftPush2 } : {}),
       ...(isTm ? { write: draftWrite || draftInput, move: draftMove } : {}),
     });
     setDraftInput('');
     setDraftPop('');
     setDraftPush('');
+    setDraftPop2('');
+    setDraftPush2('');
     setDraftWrite('');
   };
 
@@ -55,8 +61,10 @@ export function TransitionList() {
           <th>De</th>
           <th>Para</th>
           <th>{isTm ? 'Lê' : 'Símbolo'}</th>
-          {isPda && <th>Pop</th>}
-          {isPda && <th>Push</th>}
+          {hasStacks && <th>{isTwoStack ? 'Desempilha 1' : 'Pop'}</th>}
+          {hasStacks && <th>{isTwoStack ? 'Empilha 1' : 'Push'}</th>}
+          {isTwoStack && <th>Desempilha 2</th>}
+          {isTwoStack && <th>Empilha 2</th>}
           {isTm && <th>Escreve</th>}
           {isTm && <th>Move</th>}
           <th />
@@ -80,7 +88,7 @@ export function TransitionList() {
                 ))}
               </select>
             </td>
-            {isPda && (
+            {hasStacks && (
               <td>
                 <input
                   className="mono data-table__input data-table__input--narrow"
@@ -90,13 +98,33 @@ export function TransitionList() {
                 />
               </td>
             )}
-            {isPda && (
+            {hasStacks && (
               <td>
                 <input
                   className="mono data-table__input data-table__input--narrow"
                   value={t.push ?? ''}
                   placeholder="ε"
                   onChange={(e) => updateTransition(t.id, { push: e.target.value })}
+                />
+              </td>
+            )}
+            {isTwoStack && (
+              <td>
+                <input
+                  className="mono data-table__input data-table__input--narrow"
+                  value={t.pop2 ?? ''}
+                  placeholder="ε"
+                  onChange={(e) => updateTransition(t.id, { pop2: e.target.value })}
+                />
+              </td>
+            )}
+            {isTwoStack && (
+              <td>
+                <input
+                  className="mono data-table__input data-table__input--narrow"
+                  value={t.push2 ?? ''}
+                  placeholder="ε"
+                  onChange={(e) => updateTransition(t.id, { push2: e.target.value })}
                 />
               </td>
             )}
@@ -168,7 +196,7 @@ export function TransitionList() {
               ))}
             </select>
           </td>
-          {isPda && (
+          {hasStacks && (
             <td>
               <input
                 className="mono data-table__input data-table__input--narrow"
@@ -178,13 +206,33 @@ export function TransitionList() {
               />
             </td>
           )}
-          {isPda && (
+          {hasStacks && (
             <td>
               <input
                 className="mono data-table__input data-table__input--narrow"
                 value={draftPush}
                 placeholder="ε"
                 onChange={(e) => setDraftPush(e.target.value)}
+              />
+            </td>
+          )}
+          {isTwoStack && (
+            <td>
+              <input
+                className="mono data-table__input data-table__input--narrow"
+                value={draftPop2}
+                placeholder="ε"
+                onChange={(e) => setDraftPop2(e.target.value)}
+              />
+            </td>
+          )}
+          {isTwoStack && (
+            <td>
+              <input
+                className="mono data-table__input data-table__input--narrow"
+                value={draftPush2}
+                placeholder="ε"
+                onChange={(e) => setDraftPush2(e.target.value)}
               />
             </td>
           )}
