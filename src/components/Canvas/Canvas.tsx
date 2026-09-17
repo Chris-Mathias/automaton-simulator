@@ -28,12 +28,15 @@ import { formatTransitionLabels, type Transition } from '../../types/automaton';
 import {
   PDA_SYNTAX_PLACEHOLDER,
   TURING_SYNTAX_PLACEHOLDER,
+  TWO_STACK_SYNTAX_PLACEHOLDER,
   formatPdaTransitions,
   formatTuringTransitions,
+  formatTwoStackTransitions,
   parsePdaTransitions,
   parseTuringTransitions,
+  parseTwoStackTransitions,
 } from '../../engine/transitionSyntax';
-import { planPdaEdit, planSymbolEdit, planTuringEdit, type TransitionEdit } from '../../engine/labelEditing';
+import { planPdaEdit, planSymbolEdit, planTuringEdit, planTwoStackEdit, type TransitionEdit } from '../../engine/labelEditing';
 import './Canvas.css';
 
 const nodeTypes = { stateNode: StateNode };
@@ -168,9 +171,9 @@ function CanvasInner() {
     [automaton, applyTransitionEdit, setAlphabet, setTapeAlphabet],
   );
 
-  const handleCommitPda = useCallback(
-    (from: string, to: string, text: string) => {
-      const edit = planPdaEdit(automaton, from, to, text);
+  /** Applies an edit from a stack automaton's label and declares the symbols it introduced. */
+  const applyStackEdit = useCallback(
+    (edit: TransitionEdit | null) => {
       if (!edit) return;
       applyTransitionEdit(edit);
       if (edit.newStackSymbols.length > 0) {
@@ -183,6 +186,16 @@ function CanvasInner() {
     [automaton, applyTransitionEdit, setAlphabet, setStackAlphabet],
   );
 
+  const handleCommitPda = useCallback(
+    (from: string, to: string, text: string) => applyStackEdit(planPdaEdit(automaton, from, to, text)),
+    [automaton, applyStackEdit],
+  );
+
+  const handleCommitTwoStack = useCallback(
+    (from: string, to: string, text: string) => applyStackEdit(planTwoStackEdit(automaton, from, to, text)),
+    [automaton, applyStackEdit],
+  );
+
   const validateTuringText = useCallback((text: string) => {
     const parsed = parseTuringTransitions(text);
     return parsed.ok ? null : parsed.error;
@@ -193,10 +206,15 @@ function CanvasInner() {
     return parsed.ok ? null : parsed.error;
   }, []);
 
+  const validateTwoStackText = useCallback((text: string) => {
+    const parsed = parseTwoStackTransitions(text);
+    return parsed.ok ? null : parsed.error;
+  }, []);
+
   /**
    * How a transition label is typed and read back, which is the only thing that
-   * differs between kinds: a symbol list, a read/write/move triple, or a
-   * read/pop/push one.
+   * differs between kinds: a symbol list, a read/write/move triple, a
+   * read/pop/push one, or the same with a second pop/push after a bar.
    */
   const labelEditor = useMemo(() => {
     if (automaton.kind === 'TM') {
@@ -219,6 +237,23 @@ function CanvasInner() {
         commit: handleCommitPda,
       };
     }
+    if (automaton.kind === '2PDA') {
+      return {
+        placeholder: TWO_STACK_SYNTAX_PLACEHOLDER,
+        validateText: validateTwoStackText,
+        format: (transitions: Transition[]) =>
+          formatTwoStackTransitions(
+            transitions.map((t) => ({
+              input: t.input,
+              pop: t.pop ?? '',
+              push: t.push ?? '',
+              pop2: t.pop2 ?? '',
+              push2: t.push2 ?? '',
+            })),
+          ),
+        commit: handleCommitTwoStack,
+      };
+    }
     return {
       placeholder: undefined,
       validateText: undefined,
@@ -229,8 +264,10 @@ function CanvasInner() {
     automaton.kind,
     validateTuringText,
     validatePdaText,
+    validateTwoStackText,
     handleCommitTuring,
     handleCommitPda,
+    handleCommitTwoStack,
     handleCommitSymbols,
   ]);
 
