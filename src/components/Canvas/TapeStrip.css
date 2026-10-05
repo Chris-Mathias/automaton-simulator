@@ -1,0 +1,97 @@
+.tape-strip {
+  /* Keep in sync with CELL in TapeStrip.tsx — the track is offset in pixels. */
+  --tape-cell: 42px;
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  width: min(680px, calc(100% - 120px));
+  padding: 8px 0 0;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  /* The canvas keeps pan/zoom; only the strip's own chrome is inert. */
+  pointer-events: none;
+}
+
+/* Head marker — pinned to the centre, above the cell the head is reading. */
+.tape-strip__head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.tape-strip__state {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--active-soft);
+  color: var(--active);
+  font-size: var(--fs-1);
+  font-weight: 700;
+}
+
+.tape-strip__caret {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--active);
+}
+
+.tape-strip__viewport {
+  position: relative;
+  overflow: hidden;
+  height: 44px;
+  /* Fades the tape out at both ends instead of cutting it off, reading as
+     "this continues" rather than "this is where the tape stops". */
+  mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+}
+
+.tape-strip__track {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  display: flex;
+  margin-left: calc(var(--tape-cell) / -2);
+  transition: transform 200ms ease;
+}
+
+.tape-strip__cell {
+  flex: 0 0 var(--tape-cell);
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid var(--divider-soft);
+  color: var(--text);
+  font-size: var(--fs-4);
+}
+
+.tape-strip__cell.is-blank {
+  color: var(--text-faint);
+}
+
+.tape-strip__cell.is-head {
+  background: var(--active-soft);
+  color: var(--active);
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 2px var(--active);
+}
+
+.tape-strip__footer {
+  padding: 6px 0 8px;
+  border-top: 1px solid var(--divider-soft);
+  color: var(--text-faint);
+  font-size: var(--fs-1);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tape-strip__track {
+    transition: none;
+  }
+}

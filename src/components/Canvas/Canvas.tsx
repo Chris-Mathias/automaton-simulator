@@ -12,7 +12,6 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
-  type Connection,
   type OnNodeDrag,
   type OnConnect,
 } from '@xyflow/react';
@@ -21,31 +20,29 @@ import { activeDocument, useAutomatonStore } from '../../store/useAutomatonStore
 import { validate } from '../../engine/validate';
 import { StateNode, type StateNodeType } from './StateNode';
 import { TransitionEdge, type TransitionEdgeType } from './TransitionEdge';
+import { TapeStrip } from './TapeStrip';
+import { StackStrip } from './StackStrip';
 import { GRID_SIZE, NODE_DIAMETER } from './floatingEdge';
-import { TransitionDialog, type TransitionDraft } from '../Dialogs/TransitionDialog';
-import { EditTransitionsDialog } from '../Dialogs/EditTransitionsDialog';
 import { exportAutomatonToPng } from '../../persistence/exportImage';
-import { EPSILON, type Transition } from '../../types/automaton';
+import { formatTransitionLabels, type Transition } from '../../types/automaton';
+import {
+  PDA_SYNTAX_PLACEHOLDER,
+  TURING_SYNTAX_PLACEHOLDER,
+  TWO_STACK_SYNTAX_PLACEHOLDER,
+  formatPdaTransitions,
+  formatTuringTransitions,
+  formatTwoStackTransitions,
+  parsePdaTransitions,
+  parseTuringTransitions,
+  parseTwoStackTransitions,
+} from '../../engine/transitionSyntax';
+import { planPdaEdit, planSymbolEdit, planTuringEdit, planTwoStackEdit, type TransitionEdit } from '../../engine/labelEditing';
 import './Canvas.css';
 
 const nodeTypes = { stateNode: StateNode };
 const edgeTypes = { transitionEdge: TransitionEdge };
 
 const snapToGridSize = (value: number) => Math.round(value / GRID_SIZE) * GRID_SIZE;
-
-/** Typed aliases for the epsilon transition, since ε isn't on most keyboards. */
-const EPSILON_ALIASES = new Set(['eps', 'epsilon', 'vazio']);
-
-function normalizeSymbol(raw: string): string {
-  return EPSILON_ALIASES.has(raw.toLowerCase()) ? EPSILON : raw;
-}
-
-function formatLabel(kind: string, t: Transition) {
-  if (kind !== 'PDA') return t.input;
-  const popLabel = t.pop || 'ε';
-  const pushLabel = t.push || 'ε';
-  return `${t.input}, ${popLabel}→${pushLabel}`;
-}
 
 /**
  * Single source of truth for an edge's color, shared between the visible
@@ -83,14 +80,14 @@ function CanvasInner() {
   const updateTransition = useAutomatonStore((s) => s.updateTransition);
   const removeTransition = useAutomatonStore((s) => s.removeTransition);
   const setAlphabet = useAutomatonStore((s) => s.setAlphabet);
+  const setTapeAlphabet = useAutomatonStore((s) => s.setTapeAlphabet);
+  const setStackAlphabet = useAutomatonStore((s) => s.setStackAlphabet);
   const simulationResult = useAutomatonStore((s) => activeDocument(s).simulationResult);
   const simulationStepIndex = useAutomatonStore((s) => activeDocument(s).simulationStepIndex);
   const snapToGrid = useAutomatonStore((s) => s.snapToGrid);
   const toggleSnapToGrid = useAutomatonStore((s) => s.toggleSnapToGrid);
 
   const { screenToFlowPosition, fitView } = useReactFlow();
-  const [pendingConnection, setPendingConnection] = useState<Connection | null>(null);
-  const [editingEdgeKey, setEditingEdgeKey] = useState<string | null>(null);
   const [autoFocusKey, setAutoFocusKey] = useState<string | null>(null);
   const [draftEdge, setDraftEdge] = useState<{ source: string; target: string } | null>(null);
   /** Clicking a transition once arms it (red); clicking it again deletes it. */
@@ -140,35 +137,139 @@ function CanvasInner() {
     [automaton.states, activeStateIds, errorStateIds, renameState, toggleAccept, setStart, removeState],
   );
 
-  const handleCommitSymbols = useCallback(
-    (from: string, to: string, csv: string) => {
-      const symbols = [
-        ...new Set(
-          csv
-            .split(',')
-            .map((s) => normalizeSymbol(s.trim()))
-            .filter(Boolean),
-        ),
-      ].sort();
-      const existing = automaton.transitions.filter((t) => t.from === from && t.to === to);
-      for (const t of existing) {
-        if (!symbols.includes(t.input)) removeTransition(t.id);
-      }
-      const existingInputs = new Set(existing.map((t) => t.input));
-      for (const symbol of symbols) {
-        if (!existingInputs.has(symbol)) addTransition({ from, to, input: symbol });
-      }
-
-      // Keep the declared alphabet in sync with what's actually typed, so a
-      // symbol used on the canvas is never silently dropped by AFN→AFD
-      // conversion (which only iterates the declared alphabet).
-      const newSymbols = symbols.filter((s) => s !== EPSILON && !automaton.alphabet.includes(s));
-      if (newSymbols.length > 0) setAlphabet([...automaton.alphabet, ...newSymbols].sort());
-
+  const applyTransitionEdit = useCallback(
+    (edit: TransitionEdit) => {
+      for (const id of edit.remove) removeTransition(id);
+      for (const { id, patch } of edit.update) updateTransition(id, patch);
+      for (const transition of edit.add) addTransition(transition);
       setAutoFocusKey(null);
     },
-    [automaton.transitions, automaton.alphabet, addTransition, removeTransition, setAlphabet],
+    [addTransition, updateTransition, removeTransition],
   );
+
+  const handleCommitSymbols = useCallback(
+    (from: string, to: string, csv: string) => {
+      const edit = planSymbolEdit(automaton, from, to, csv);
+      applyTransitionEdit(edit);
+      if (edit.newInputSymbols.length > 0) setAlphabet([...automaton.alphabet, ...edit.newInputSymbols].sort());
+    },
+    [automaton, applyTransitionEdit, setAlphabet],
+  );
+
+  const handleCommitTuring = useCallback(
+    (from: string, to: string, text: string) => {
+      const edit = planTuringEdit(automaton, from, to, text);
+      if (!edit) return;
+      applyTransitionEdit(edit);
+      if (edit.newTapeSymbols.length > 0) {
+        setTapeAlphabet([...(automaton.tapeAlphabet ?? []), ...edit.newTapeSymbols].sort());
+      }
+      if (edit.newInputSymbols.length > 0) {
+        setAlphabet([...automaton.alphabet, ...edit.newInputSymbols].sort());
+      }
+    },
+    [automaton, applyTransitionEdit, setAlphabet, setTapeAlphabet],
+  );
+
+  /** Applies an edit from a stack automaton's label and declares the symbols it introduced. */
+  const applyStackEdit = useCallback(
+    (edit: TransitionEdit | null) => {
+      if (!edit) return;
+      applyTransitionEdit(edit);
+      if (edit.newStackSymbols.length > 0) {
+        setStackAlphabet([...(automaton.stackAlphabet ?? []), ...edit.newStackSymbols].sort());
+      }
+      if (edit.newInputSymbols.length > 0) {
+        setAlphabet([...automaton.alphabet, ...edit.newInputSymbols].sort());
+      }
+    },
+    [automaton, applyTransitionEdit, setAlphabet, setStackAlphabet],
+  );
+
+  const handleCommitPda = useCallback(
+    (from: string, to: string, text: string) => applyStackEdit(planPdaEdit(automaton, from, to, text)),
+    [automaton, applyStackEdit],
+  );
+
+  const handleCommitTwoStack = useCallback(
+    (from: string, to: string, text: string) => applyStackEdit(planTwoStackEdit(automaton, from, to, text)),
+    [automaton, applyStackEdit],
+  );
+
+  const validateTuringText = useCallback((text: string) => {
+    const parsed = parseTuringTransitions(text);
+    return parsed.ok ? null : parsed.error;
+  }, []);
+
+  const validatePdaText = useCallback((text: string) => {
+    const parsed = parsePdaTransitions(text);
+    return parsed.ok ? null : parsed.error;
+  }, []);
+
+  const validateTwoStackText = useCallback((text: string) => {
+    const parsed = parseTwoStackTransitions(text);
+    return parsed.ok ? null : parsed.error;
+  }, []);
+
+  /**
+   * How a transition label is typed and read back, which is the only thing that
+   * differs between kinds: a symbol list, a read/write/move triple, a
+   * read/pop/push one, or the same with a second pop/push after a bar.
+   */
+  const labelEditor = useMemo(() => {
+    if (automaton.kind === 'TM') {
+      return {
+        placeholder: TURING_SYNTAX_PLACEHOLDER,
+        validateText: validateTuringText,
+        format: (transitions: Transition[]) =>
+          formatTuringTransitions(
+            transitions.map((t) => ({ input: t.input, write: t.write || t.input, move: t.move ?? 'R' })),
+          ),
+        commit: handleCommitTuring,
+      };
+    }
+    if (automaton.kind === 'PDA') {
+      return {
+        placeholder: PDA_SYNTAX_PLACEHOLDER,
+        validateText: validatePdaText,
+        format: (transitions: Transition[]) =>
+          formatPdaTransitions(transitions.map((t) => ({ input: t.input, pop: t.pop ?? '', push: t.push ?? '' }))),
+        commit: handleCommitPda,
+      };
+    }
+    if (automaton.kind === '2PDA') {
+      return {
+        placeholder: TWO_STACK_SYNTAX_PLACEHOLDER,
+        validateText: validateTwoStackText,
+        format: (transitions: Transition[]) =>
+          formatTwoStackTransitions(
+            transitions.map((t) => ({
+              input: t.input,
+              pop: t.pop ?? '',
+              push: t.push ?? '',
+              pop2: t.pop2 ?? '',
+              push2: t.push2 ?? '',
+            })),
+          ),
+        commit: handleCommitTwoStack,
+      };
+    }
+    return {
+      placeholder: undefined,
+      validateText: undefined,
+      format: (transitions: Transition[]) => transitions.map((t) => t.input).join(','),
+      commit: handleCommitSymbols,
+    };
+  }, [
+    automaton.kind,
+    validateTuringText,
+    validatePdaText,
+    validateTwoStackText,
+    handleCommitTuring,
+    handleCommitPda,
+    handleCommitTwoStack,
+    handleCommitSymbols,
+  ]);
 
   const storeEdges = useMemo<TransitionEdgeType[]>(() => {
     const groups = new Map<string, Transition[]>();
@@ -178,7 +279,6 @@ function CanvasInner() {
       list.push(t);
       groups.set(key, list);
     }
-    const editable = automaton.kind !== 'PDA';
     const result: TransitionEdgeType[] = [...groups.entries()].map(([key, unsortedTransitions]) => {
       const transitions = [...unsortedTransitions].sort((a, b) => a.input.localeCompare(b.input));
       const from = transitions[0].from;
@@ -196,16 +296,18 @@ function CanvasInner() {
         type: 'transitionEdge',
         markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
         data: {
-          label: transitions.map((t) => formatLabel(automaton.kind, t)).join(', '),
+          label: formatTransitionLabels(automaton.kind, transitions),
           color,
           isActive,
           isArmed,
           curved,
           transitionIds: transitions.map((t) => t.id),
-          editable,
-          symbolsCsv: transitions.map((t) => t.input).join(','),
-          autoFocus: editable && key === autoFocusKey,
-          onCommitSymbols: editable ? (csv: string) => handleCommitSymbols(from, to, csv) : undefined,
+          editable: true,
+          editText: labelEditor.format(transitions),
+          placeholder: labelEditor.placeholder,
+          validateText: labelEditor.validateText,
+          autoFocus: key === autoFocusKey,
+          onCommitText: (text: string) => labelEditor.commit(from, to, text),
         },
       };
     });
@@ -227,10 +329,12 @@ function CanvasInner() {
           curved: draftEdge.source !== draftEdge.target && groups.has(`${draftEdge.target}=>${draftEdge.source}`),
           transitionIds: [],
           editable: true,
-          symbolsCsv: '',
+          editText: '',
+          placeholder: labelEditor.placeholder,
+          validateText: labelEditor.validateText,
           autoFocus: true,
-          onCommitSymbols: (csv: string) => {
-            handleCommitSymbols(draftEdge.source, draftEdge.target, csv);
+          onCommitText: (text: string) => {
+            labelEditor.commit(draftEdge.source, draftEdge.target, text);
             setDraftEdge(null);
           },
           onCancel: () => setDraftEdge(null),
@@ -245,7 +349,7 @@ function CanvasInner() {
     activeTransitionIds,
     errorTransitionIds,
     autoFocusKey,
-    handleCommitSymbols,
+    labelEditor,
     draftEdge,
     armedEdgeKey,
     hoveredEdgeKey,
@@ -305,10 +409,6 @@ function CanvasInner() {
   const handleConnect: OnConnect = useCallback(
     (connection) => {
       if (!connection.source || !connection.target) return;
-      if (automaton.kind === 'PDA') {
-        setPendingConnection(connection);
-        return;
-      }
       const alreadyExists = automaton.transitions.some(
         (t) => t.from === connection.source && t.to === connection.target,
       );
@@ -318,14 +418,8 @@ function CanvasInner() {
         setDraftEdge({ source: connection.source, target: connection.target });
       }
     },
-    [automaton.kind, automaton.transitions],
+    [automaton.transitions],
   );
-
-  const handleTransitionSubmit = (draft: TransitionDraft) => {
-    if (!pendingConnection?.source || !pendingConnection.target) return;
-    addTransition({ from: pendingConnection.source, to: pendingConnection.target, ...draft });
-    setPendingConnection(null);
-  };
 
   const handleEdgesDelete = useCallback(
     (deleted: TransitionEdgeType[]) => {
@@ -344,18 +438,11 @@ function CanvasInner() {
     [removeState],
   );
 
-  const stateById = useMemo(() => new Map(automaton.states.map((s) => [s.id, s])), [automaton.states]);
-
   const handleEdgeClick = useCallback(
     (_event: React.MouseEvent, edge: TransitionEdgeType) => {
-      // PDA transitions (which need pop/push fields) always open the modal.
-      if (automaton.kind === 'PDA') {
-        setEditingEdgeKey(edge.id);
-        return;
-      }
-      // DFA/NFA: clicking the line (not the label, which edits symbols
-      // inline) arms it for deletion; clicking the same, already-armed line
-      // again deletes it. Undo (Ctrl+Z) covers accidental deletes.
+      // Clicking the line (not the label, which edits the transitions inline)
+      // arms it for deletion; clicking the same, already-armed line again
+      // deletes it. Undo (Ctrl+Z) covers accidental deletes.
       if (armedEdgeKey === edge.id) {
         const ids = (edge.data?.transitionIds as string[] | undefined) ?? [];
         for (const id of ids) removeTransition(id);
@@ -364,12 +451,7 @@ function CanvasInner() {
         setArmedEdgeKey(edge.id);
       }
     },
-    [automaton.kind, armedEdgeKey, removeTransition],
-  );
-
-  const editingTransitions = useMemo(
-    () => (editingEdgeKey ? automaton.transitions.filter((t) => `${t.from}=>${t.to}` === editingEdgeKey) : []),
-    [automaton.transitions, editingEdgeKey],
+    [armedEdgeKey, removeTransition],
   );
 
   return (
@@ -385,10 +467,7 @@ function CanvasInner() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeDragStop={handleNodeDragStop}
-        onPaneClick={() => {
-          setEditingEdgeKey(null);
-          setArmedEdgeKey(null);
-        }}
+        onPaneClick={() => setArmedEdgeKey(null)}
         onDoubleClick={handlePaneDoubleClick}
         onConnect={handleConnect}
         onEdgeClick={handleEdgeClick}
@@ -430,32 +509,8 @@ function CanvasInner() {
         <MiniMap pannable zoomable className="canvas-minimap" />
       </ReactFlow>
 
-      {pendingConnection?.source && pendingConnection.target && (
-        <TransitionDialog
-          kind={automaton.kind}
-          alphabet={automaton.alphabet}
-          stackAlphabet={automaton.stackAlphabet}
-          fromLabel={stateById.get(pendingConnection.source)?.label ?? pendingConnection.source}
-          toLabel={stateById.get(pendingConnection.target)?.label ?? pendingConnection.target}
-          onSubmit={handleTransitionSubmit}
-          onClose={() => setPendingConnection(null)}
-        />
-      )}
-
-      {editingTransitions.length > 0 && (
-        <EditTransitionsDialog
-          kind={automaton.kind}
-          alphabet={automaton.alphabet}
-          stackAlphabet={automaton.stackAlphabet}
-          fromLabel={stateById.get(editingTransitions[0].from)?.label ?? editingTransitions[0].from}
-          toLabel={stateById.get(editingTransitions[0].to)?.label ?? editingTransitions[0].to}
-          transitions={editingTransitions}
-          onUpdate={updateTransition}
-          onRemove={removeTransition}
-          onAdd={addTransition}
-          onClose={() => setEditingEdgeKey(null)}
-        />
-      )}
+      <TapeStrip />
+      <StackStrip />
     </div>
   );
 }

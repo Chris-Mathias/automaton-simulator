@@ -13,11 +13,14 @@ export interface TransitionEdgeData extends Record<string, unknown> {
   isArmed: boolean;
   /** True when a transition also exists in the opposite direction (A->B and B->A); curves so the two don't overlap. */
   curved: boolean;
-  /** DFA/NFA only: lets the label itself be edited as a comma-separated symbol list. */
+  /** DFA/NFA/TM: lets the label itself be edited as text (symbol list, resp. read/write/move triples). */
   editable?: boolean;
-  symbolsCsv?: string;
+  editText?: string;
+  placeholder?: string;
   autoFocus?: boolean;
-  onCommitSymbols?: (csv: string) => void;
+  /** Returns an error message for text that must not be committed, or null. */
+  validateText?: (text: string) => string | null;
+  onCommitText?: (text: string) => void;
   /** Draft (not-yet-created) edges disappear instead of reverting when Escape is pressed. */
   onCancel?: () => void;
 }
@@ -45,11 +48,13 @@ export function TransitionEdge({ id, source, target, data, markerEnd }: EdgeProp
   const targetNode = useInternalNode(target);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (data?.autoFocus) {
-      setDraft(data.symbolsCsv ?? '');
+      setDraft(data.editText ?? '');
       setEditing(true);
+      setError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.autoFocus]);
@@ -80,9 +85,23 @@ export function TransitionEdge({ id, source, target, data, markerEnd }: EdgeProp
       : buildStraightPath(sourcePoint, targetPoint));
   }
 
-  const commit = () => {
+  const startEditing = () => {
+    setDraft(data.editText ?? '');
+    setError(null);
+    setEditing(true);
+  };
+
+  /** Abandons the edit, leaving the transition exactly as it was. */
+  const discard = () => {
     setEditing(false);
-    data.onCommitSymbols?.(draft);
+    setError(null);
+    data.onCancel?.();
+  };
+
+  const commit = () => {
+    if (error) return;
+    setEditing(false);
+    data.onCommitText?.(draft);
   };
 
   return (
@@ -103,23 +122,31 @@ export function TransitionEdge({ id, source, target, data, markerEnd }: EdgeProp
           style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
         >
           {editing ? (
-            <input
-              autoFocus
-              className="transition-edge__input mono"
-              value={draft}
-              style={{ width: `calc(${Math.max(1, draft.length)}ch + 22px)` }}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={commit}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commit();
-                if (e.key === 'Escape') {
-                  setEditing(false);
-                  data.onCancel?.();
-                }
-                e.stopPropagation();
-              }}
-              onClick={(e) => e.stopPropagation()}
-            />
+            <>
+              <input
+                autoFocus
+                className={`transition-edge__input mono ${error ? 'is-invalid' : ''}`}
+                value={draft}
+                placeholder={data.placeholder}
+                style={{
+                  width: `calc(${Math.max(draft.length, data.placeholder?.length ?? 1)}ch + 22px)`,
+                }}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  setError(data.validateText?.(e.target.value) ?? null);
+                }}
+                // Committing on blur would quietly accept malformed text, so
+                // an invalid edit is thrown away instead.
+                onBlur={() => (error ? discard() : commit())}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commit();
+                  if (e.key === 'Escape') discard();
+                  e.stopPropagation();
+                }}
+                onClick={(e) => e.stopPropagation()}
+              />
+              {error && <div className="transition-edge__error">{error}</div>}
+            </>
           ) : (
             <div
               className={[
@@ -135,8 +162,7 @@ export function TransitionEdge({ id, source, target, data, markerEnd }: EdgeProp
                 data.editable
                   ? (e) => {
                       e.stopPropagation();
-                      setDraft(data.symbolsCsv ?? '');
-                      setEditing(true);
+                      startEditing();
                     }
                   : undefined
               }

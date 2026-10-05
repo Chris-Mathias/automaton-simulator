@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { activeDocument, useAutomatonStore } from '../../store/useAutomatonStore';
 import { convertNfaToDfa } from '../../engine/convertNfaToDfa';
 import { exportAutomatonToFile, importAutomatonFromFile } from '../../persistence/exportImport';
+import { BLANK, hasStack } from '../../types/automaton';
+import { normalizeTapeSymbol } from '../../engine/transitionSyntax';
 import './Toolbar.css';
 
 function parseSymbols(raw: string): string[] {
@@ -13,6 +15,13 @@ function parseSymbols(raw: string): string[] {
   return [...seen].sort();
 }
 
+/** The blank is always implicit on the tape, so declaring it — under any of
+ *  its typed aliases — is a no-op rather than a second, literal symbol that
+ *  would then shadow the alias on every transition label. */
+function parseTapeSymbols(raw: string): string[] {
+  return [...new Set(parseSymbols(raw).map(normalizeTapeSymbol))].filter((s) => s !== BLANK);
+}
+
 export function Toolbar() {
   const automaton = useAutomatonStore((s) => activeDocument(s).automaton);
   const theme = useAutomatonStore((s) => s.theme);
@@ -20,6 +29,7 @@ export function Toolbar() {
   const renameAutomaton = useAutomatonStore((s) => s.renameAutomaton);
   const setAlphabet = useAutomatonStore((s) => s.setAlphabet);
   const setStackAlphabet = useAutomatonStore((s) => s.setStackAlphabet);
+  const setTapeAlphabet = useAutomatonStore((s) => s.setTapeAlphabet);
   const openTab = useAutomatonStore((s) => s.openTab);
   const undo = useAutomatonStore((s) => s.undo);
   const redo = useAutomatonStore((s) => s.redo);
@@ -28,20 +38,23 @@ export function Toolbar() {
 
   const [alphabetDraft, setAlphabetDraft] = useState(automaton.alphabet.join(', '));
   const [stackDraft, setStackDraft] = useState((automaton.stackAlphabet ?? []).join(', '));
+  const [tapeDraft, setTapeDraft] = useState((automaton.tapeAlphabet ?? []).join(', '));
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const alphabetKey = automaton.alphabet.join(',');
   const stackAlphabetKey = (automaton.stackAlphabet ?? []).join(',');
+  const tapeAlphabetKey = (automaton.tapeAlphabet ?? []).join(',');
 
   useEffect(() => {
     setAlphabetDraft(automaton.alphabet.join(', '));
     setStackDraft((automaton.stackAlphabet ?? []).join(', '));
+    setTapeDraft((automaton.tapeAlphabet ?? []).join(', '));
     // Resyncs whenever the underlying alphabet changes for any reason — tab
     // switch, blur-commit here, or the canvas auto-adding a typed symbol —
     // not just when switching automatons.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [automaton.id, alphabetKey, stackAlphabetKey]);
+  }, [automaton.id, alphabetKey, stackAlphabetKey, tapeAlphabetKey]);
 
   const handleImportClick = () => fileInputRef.current?.click();
 
@@ -86,10 +99,9 @@ export function Toolbar() {
             value={alphabetDraft}
             onChange={(e) => setAlphabetDraft(e.target.value)}
             onBlur={() => setAlphabet(parseSymbols(alphabetDraft))}
-            placeholder="0, 1"
           />
         </label>
-        {automaton.kind === 'PDA' && (
+        {hasStack(automaton.kind) && (
           <label className="toolbar__field">
             <span>Alfabeto da pilha</span>
             <input
@@ -98,6 +110,17 @@ export function Toolbar() {
               onChange={(e) => setStackDraft(e.target.value)}
               onBlur={() => setStackAlphabet(parseSymbols(stackDraft))}
               placeholder="Z, A"
+            />
+          </label>
+        )}
+        {automaton.kind === 'TM' && (
+          <label className="toolbar__field">
+            <span>Alfabeto da fita</span>
+            <input
+              className="mono"
+              value={tapeDraft}
+              onChange={(e) => setTapeDraft(e.target.value)}
+              onBlur={() => setTapeAlphabet(parseTapeSymbols(tapeDraft))}
             />
           </label>
         )}

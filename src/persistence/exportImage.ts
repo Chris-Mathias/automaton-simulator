@@ -1,5 +1,5 @@
 import { NODE_DIAMETER, buildCurvedPath, buildLoopPath, buildStraightPath } from '../components/Canvas/floatingEdge';
-import type { Automaton, Transition } from '../types/automaton';
+import { formatTransitionLabels, type Automaton, type Transition } from '../types/automaton';
 
 /**
  * Builds the export PNG from the automaton's *data* (positions, labels,
@@ -37,11 +37,6 @@ interface Point {
 
 function escapeXml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function formatLabel(kind: Automaton['kind'], t: Transition): string {
-  if (kind !== 'PDA') return t.input;
-  return `${t.input}, ${t.pop || 'ε'}→${t.push || 'ε'}`;
 }
 
 function pointOnCircle(from: Point, towards: Point, radius: number): Point {
@@ -98,7 +93,7 @@ function buildSvg(automaton: Automaton): { svg: string; width: number; height: n
     const toCenter = centers.get(to);
     if (!fromCenter || !toCenter) continue;
 
-    const label = [...group].sort((a, b) => a.input.localeCompare(b.input)).map((t) => formatLabel(automaton.kind, t)).join(', ');
+    const label = formatTransitionLabels(automaton.kind, [...group].sort((a, b) => a.input.localeCompare(b.input)));
 
     let path: string;
     let labelX: number;

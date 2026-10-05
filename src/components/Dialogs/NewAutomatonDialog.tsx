@@ -6,6 +6,8 @@ const KIND_LABELS: Record<AutomatonKind, string> = {
   DFA: 'AFD — Autômato Finito Determinístico',
   NFA: 'AFN — Autômato Finito Não-Determinístico',
   PDA: 'PDA — Autômato de Pilha',
+  '2PDA': 'AP2 — Autômato de Duas Pilhas',
+  TM: 'MT — Máquina de Turing',
 };
 
 export function NewAutomatonDialog({

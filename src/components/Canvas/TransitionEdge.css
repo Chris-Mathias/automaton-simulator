@@ -44,3 +44,27 @@
   outline: none;
   transition: width 80ms ease;
 }
+
+.transition-edge__input.is-invalid {
+  border-color: var(--error);
+}
+
+/* Sits under the editor without displacing it — the label is anchored to a
+   point on the edge, so growing the box would drag the input off the line. */
+.transition-edge__error {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  max-width: 260px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-1);
+  line-height: 1.35;
+  text-align: center;
+  box-shadow: var(--shadow-md);
+  background: var(--error-soft);
+  border: 1px solid var(--error);
+  color: var(--error);
+}

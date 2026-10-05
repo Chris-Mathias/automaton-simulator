@@ -47,6 +47,7 @@ interface StoreState {
   renameAutomaton: (name: string) => void;
   setAlphabet: (alphabet: string[]) => void;
   setStackAlphabet: (stackAlphabet: string[]) => void;
+  setTapeAlphabet: (tapeAlphabet: string[]) => void;
 
   addState: (position: { x: number; y: number }) => string;
   updateStatePosition: (id: string, position: { x: number; y: number }) => void;
@@ -198,6 +199,8 @@ export const useAutomatonStore = create<StoreState>((set, get) => ({
   setAlphabet: (alphabet) => mutateAutomaton(set, get, (automaton) => ({ ...automaton, alphabet })),
 
   setStackAlphabet: (stackAlphabet) => mutateAutomaton(set, get, (automaton) => ({ ...automaton, stackAlphabet })),
+
+  setTapeAlphabet: (tapeAlphabet) => mutateAutomaton(set, get, (automaton) => ({ ...automaton, tapeAlphabet })),
 
   addState: (position) => {
     const id = crypto.randomUUID();
