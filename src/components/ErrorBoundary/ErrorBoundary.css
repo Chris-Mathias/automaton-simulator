@@ -1,0 +1,73 @@
+.error-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+
+.error-screen__card {
+  width: min(520px, 100%);
+  padding: 24px;
+  background: var(--bg-panel);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.error-screen__card h1 {
+  margin: 0 0 8px;
+  font-size: var(--fs-5);
+  font-weight: 600;
+}
+
+.error-screen__card p {
+  margin: 0 0 16px;
+  color: var(--text-dim);
+  font-size: var(--fs-3);
+  line-height: 1.5;
+}
+
+.error-screen__detail {
+  margin: 0 0 20px;
+  padding: 10px 12px;
+  background: var(--error-soft);
+  color: var(--error);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.error-screen__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.error-screen__actions button {
+  padding: 8px 14px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--field-fill);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-2);
+  cursor: pointer;
+}
+
+.error-screen__actions button:hover {
+  background: var(--field-fill-hover);
+}
+
+.error-screen__actions .error-screen__primary {
+  background: var(--accent);
+  color: #0d0f14;
+}
+
+.error-screen__actions .error-screen__danger {
+  color: var(--error);
+}

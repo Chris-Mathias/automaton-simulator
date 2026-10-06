@@ -53,3 +53,21 @@ export function saveWorkspace(workspace: PersistedWorkspace): void {
     // Storage full or unavailable (e.g. private browsing) - autosave is best-effort.
   }
 }
+
+/** Raw saved workspace, unparsed, so it can still be backed up when it no longer loads. */
+export function readRawWorkspace(): string | null {
+  try {
+    return localStorage.getItem(WORKSPACE_KEY) ?? localStorage.getItem(LEGACY_SINGLE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function clearWorkspace(): void {
+  try {
+    localStorage.removeItem(WORKSPACE_KEY);
+    localStorage.removeItem(LEGACY_SINGLE_KEY);
+  } catch {
+    // Nothing to clear if storage is unavailable.
+  }
+}
