@@ -17,6 +17,14 @@ describe('loadWorkspace', () => {
     expect(workspace?.automatons.map((a) => a.id)).toEqual([good.id]);
   });
 
+  it('drops automatons that repeat an id already loaded', () => {
+    const a = createEmptyAutomaton('DFA', 'Primeiro');
+    const duplicate = { ...createEmptyAutomaton('NFA', 'Repetido'), id: a.id };
+    localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ schemaVersion: 1, automatons: [a, duplicate], activeId: a.id }));
+
+    expect(loadWorkspace()?.automatons.map((x) => x.name)).toEqual(['Primeiro']);
+  });
+
   it('returns null when no automaton survives validation', () => {
     const broken = { ...createEmptyAutomaton('DFA'), transitions: [{ id: 't' }] };
     localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ schemaVersion: 1, automatons: [broken], activeId: broken.id }));

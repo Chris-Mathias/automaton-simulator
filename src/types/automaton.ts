@@ -99,25 +99,45 @@ export function formatTransitionLabels(kind: AutomatonKind, transitions: Transit
   return transitions.map((t) => formatTransitionLabel(kind, t)).join(separator);
 }
 
+/**
+ * Generous ceilings no hand-built automaton gets near, but low enough that a
+ * crafted file can't freeze the tab in validation, layout or simulation.
+ */
+export const AUTOMATON_LIMITS = {
+  states: 1000,
+  transitions: 10000,
+  symbols: 500,
+  textLength: 500,
+  coordinate: 10_000_000,
+} as const;
+
+function isText(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= AUTOMATON_LIMITS.textLength;
+}
+
+function isCoordinate(value: unknown): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= AUTOMATON_LIMITS.coordinate;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+function isSymbolList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length <= AUTOMATON_LIMITS.symbols && value.every(isText);
 }
 
-function isOptionalString(value: unknown): boolean {
-  return value === undefined || typeof value === 'string';
+function isOptionalText(value: unknown): boolean {
+  return value === undefined || isText(value);
 }
 
 function isState(value: unknown): value is AutomatonState {
   if (!isRecord(value) || !isRecord(value.position)) return false;
   return (
-    typeof value.id === 'string' &&
-    typeof value.label === 'string' &&
-    Number.isFinite(value.position.x) &&
-    Number.isFinite(value.position.y) &&
+    isText(value.id) &&
+    isText(value.label) &&
+    isCoordinate(value.position.x) &&
+    isCoordinate(value.position.y) &&
     typeof value.isStart === 'boolean' &&
     typeof value.isAccept === 'boolean'
   );
@@ -126,17 +146,17 @@ function isState(value: unknown): value is AutomatonState {
 function isTransition(value: unknown, stateIds: Set<string>): value is Transition {
   if (!isRecord(value)) return false;
   return (
-    typeof value.id === 'string' &&
+    isText(value.id) &&
     typeof value.from === 'string' &&
     typeof value.to === 'string' &&
     stateIds.has(value.from) &&
     stateIds.has(value.to) &&
-    typeof value.input === 'string' &&
-    isOptionalString(value.pop) &&
-    isOptionalString(value.push) &&
-    isOptionalString(value.pop2) &&
-    isOptionalString(value.push2) &&
-    isOptionalString(value.write) &&
+    isText(value.input) &&
+    isOptionalText(value.pop) &&
+    isOptionalText(value.push) &&
+    isOptionalText(value.pop2) &&
+    isOptionalText(value.push2) &&
+    isOptionalText(value.write) &&
     (value.move === undefined || value.move === 'L' || value.move === 'R' || value.move === 'S')
   );
 }
@@ -150,14 +170,16 @@ export function isAutomaton(value: unknown): value is Automaton {
   if (!isRecord(value)) return false;
   if (
     value.schemaVersion !== 1 ||
-    typeof value.id !== 'string' ||
-    typeof value.name !== 'string' ||
+    !isText(value.id) ||
+    !isText(value.name) ||
     !(value.kind === 'DFA' || value.kind === 'NFA' || value.kind === 'PDA' || value.kind === '2PDA' || value.kind === 'TM') ||
-    !isStringArray(value.alphabet) ||
-    (value.stackAlphabet !== undefined && !isStringArray(value.stackAlphabet)) ||
-    (value.tapeAlphabet !== undefined && !isStringArray(value.tapeAlphabet)) ||
+    !isSymbolList(value.alphabet) ||
+    (value.stackAlphabet !== undefined && !isSymbolList(value.stackAlphabet)) ||
+    (value.tapeAlphabet !== undefined && !isSymbolList(value.tapeAlphabet)) ||
     !Array.isArray(value.states) ||
     !Array.isArray(value.transitions) ||
+    value.states.length > AUTOMATON_LIMITS.states ||
+    value.transitions.length > AUTOMATON_LIMITS.transitions ||
     !value.states.every(isState)
   ) {
     return false;

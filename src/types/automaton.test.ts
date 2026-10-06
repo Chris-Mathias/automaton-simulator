@@ -6,6 +6,7 @@ import {
   formatTransitionLabels,
   hasStack,
   isAutomaton,
+  AUTOMATON_LIMITS,
   type Transition,
 } from './automaton';
 
@@ -134,5 +135,56 @@ describe('isAutomaton - structural validation', () => {
   it('rejects alphabets with non-string symbols', () => {
     expect(isAutomaton({ ...valid(), alphabet: ['a', 1] })).toBe(false);
     expect(isAutomaton({ ...valid(), stackAlphabet: [null] })).toBe(false);
+  });
+});
+
+describe('isAutomaton - structural limits', () => {
+  function withStates(count: number): Record<string, unknown> {
+    const states = Array.from({ length: count }, (_, i) => ({
+      id: `q${i}`,
+      label: `q${i}`,
+      position: { x: 0, y: 0 },
+      isStart: false,
+      isAccept: false,
+    }));
+    return { ...createEmptyAutomaton('DFA'), states };
+  }
+
+  it('accepts an automaton right at the state limit', () => {
+    expect(isAutomaton(withStates(AUTOMATON_LIMITS.states))).toBe(true);
+  });
+
+  it('rejects too many states', () => {
+    expect(isAutomaton(withStates(AUTOMATON_LIMITS.states + 1))).toBe(false);
+  });
+
+  it('rejects too many transitions', () => {
+    const a = withStates(1);
+    const transitions = Array.from({ length: AUTOMATON_LIMITS.transitions + 1 }, (_, i) => ({
+      id: `t${i}`,
+      from: 'q0',
+      to: 'q0',
+      input: 'a',
+    }));
+    expect(isAutomaton({ ...a, transitions })).toBe(false);
+  });
+
+  it('rejects an oversized alphabet', () => {
+    const alphabet = Array.from({ length: AUTOMATON_LIMITS.symbols + 1 }, (_, i) => `s${i}`);
+    expect(isAutomaton({ ...createEmptyAutomaton('DFA'), alphabet })).toBe(false);
+  });
+
+  it('rejects overly long text fields', () => {
+    const long = 'x'.repeat(AUTOMATON_LIMITS.textLength + 1);
+    expect(isAutomaton({ ...createEmptyAutomaton('DFA'), name: long })).toBe(false);
+    const a = withStates(1);
+    (a.states as Record<string, unknown>[])[0].label = long;
+    expect(isAutomaton(a)).toBe(false);
+  });
+
+  it('rejects coordinates far outside any usable canvas', () => {
+    const a = withStates(1);
+    (a.states as Record<string, unknown>[])[0].position = { x: AUTOMATON_LIMITS.coordinate * 2, y: 0 };
+    expect(isAutomaton(a)).toBe(false);
   });
 });

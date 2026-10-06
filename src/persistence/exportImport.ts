@@ -32,7 +32,9 @@ export function importAutomatonFromFile(file: File): Promise<Automaton> {
           reject(new ImportError('O arquivo não tem o formato esperado de um autômato.'));
           return;
         }
-        resolve(parsed);
+        // Tabs are keyed by automaton id; reusing the file's id would let the
+        // same file imported twice open two tabs that collide.
+        resolve({ ...parsed, id: crypto.randomUUID() });
       } catch {
         reject(new ImportError('O arquivo não é um JSON válido.'));
       }

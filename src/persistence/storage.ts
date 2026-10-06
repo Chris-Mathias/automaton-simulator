@@ -18,7 +18,12 @@ function parseWorkspace(value: unknown): PersistedWorkspace | null {
   if (typeof value !== 'object' || value === null) return null;
   const v = value as Record<string, unknown>;
   if (v.schemaVersion !== 1 || !Array.isArray(v.automatons) || typeof v.activeId !== 'string') return null;
-  const automatons = v.automatons.filter(isAutomaton);
+  const seenIds = new Set<string>();
+  const automatons = v.automatons.filter((a): a is Automaton => {
+    if (!isAutomaton(a) || seenIds.has(a.id)) return false;
+    seenIds.add(a.id);
+    return true;
+  });
   if (automatons.length === 0) return null;
   return { schemaVersion: 1, automatons, activeId: v.activeId };
 }

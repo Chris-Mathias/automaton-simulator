@@ -9,7 +9,15 @@ function jsonFile(content: string): File {
 describe('importAutomatonFromFile', () => {
   it('reads a valid automaton', async () => {
     const automaton = createEmptyAutomaton('NFA', 'Importado');
-    await expect(importAutomatonFromFile(jsonFile(JSON.stringify(automaton)))).resolves.toEqual(automaton);
+    const imported = await importAutomatonFromFile(jsonFile(JSON.stringify(automaton)));
+    expect({ ...imported, id: automaton.id }).toEqual(automaton);
+  });
+
+  it('gives each import a fresh id, so importing the same file twice opens two distinct tabs', async () => {
+    const content = JSON.stringify(createEmptyAutomaton('DFA'));
+    const first = await importAutomatonFromFile(jsonFile(content));
+    const second = await importAutomatonFromFile(jsonFile(content));
+    expect(first.id).not.toBe(second.id);
   });
 
   it('rejects a file larger than the import limit without reading it', async () => {
