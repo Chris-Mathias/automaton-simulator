@@ -26,3 +26,9 @@ dist-ssr
 
 # Artefatos de orquestração de planos (ledger, briefs, relatórios)
 .superpowers/
+
+# Segredos e artefatos de teste E2E
+.env
+.env.*
+test-results/
+playwright-report/

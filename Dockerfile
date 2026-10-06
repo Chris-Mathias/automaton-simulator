@@ -7,6 +7,10 @@ COPY . .
 RUN pnpm test && pnpm build
 
 FROM docker.io/nginxinc/nginx-unprivileged:1.29-alpine
+# The base image's sample pages would otherwise ship alongside the app.
+USER root
+RUN rm -rf /usr/share/nginx/html/*
+USER 101
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 COPY deploy/security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY --from=build /app/dist /usr/share/nginx/html
