@@ -51,3 +51,88 @@ describe('formatTransitionLabel - 2PDA', () => {
     );
   });
 });
+
+describe('isAutomaton - structural validation', () => {
+  function valid(): Record<string, unknown> {
+    return {
+      schemaVersion: 1,
+      id: 'a',
+      name: 'Teste',
+      kind: 'PDA',
+      alphabet: ['a', 'b'],
+      stackAlphabet: ['Z'],
+      states: [
+        { id: 'q0', label: 'q0', position: { x: 0, y: 0 }, isStart: true, isAccept: false },
+        { id: 'q1', label: 'q1', position: { x: 100, y: 50 }, isStart: false, isAccept: true },
+      ],
+      transitions: [{ id: 't0', from: 'q0', to: 'q1', input: 'a', pop: 'Z', push: 'AZ' }],
+      startStateId: 'q0',
+    };
+  }
+
+  it('accepts a well-formed automaton', () => {
+    expect(isAutomaton(valid())).toBe(true);
+  });
+
+  it('accepts a Turing machine transition with write and move', () => {
+    const tm = {
+      ...valid(),
+      kind: 'TM',
+      stackAlphabet: undefined,
+      tapeAlphabet: ['a'],
+      transitions: [{ id: 't0', from: 'q0', to: 'q1', input: 'a', write: 'b', move: 'R' }],
+    };
+    expect(isAutomaton(tm)).toBe(true);
+  });
+
+  it('rejects a state without a numeric position', () => {
+    const a = valid();
+    (a.states as Record<string, unknown>[])[0].position = { x: '0', y: 0 };
+    expect(isAutomaton(a)).toBe(false);
+  });
+
+  it('rejects a state with a non-finite coordinate', () => {
+    const a = valid();
+    (a.states as Record<string, unknown>[])[0].position = { x: 0, y: Infinity };
+    expect(isAutomaton(a)).toBe(false);
+  });
+
+  it('rejects a state missing its flags', () => {
+    const a = valid();
+    delete (a.states as Record<string, unknown>[])[1].isAccept;
+    expect(isAutomaton(a)).toBe(false);
+  });
+
+  it('rejects duplicated state ids', () => {
+    const a = valid();
+    (a.states as Record<string, unknown>[])[1].id = 'q0';
+    expect(isAutomaton(a)).toBe(false);
+  });
+
+  it('rejects a transition pointing to a state that does not exist', () => {
+    const a = valid();
+    (a.transitions as Record<string, unknown>[])[0].to = 'q9';
+    expect(isAutomaton(a)).toBe(false);
+  });
+
+  it('rejects a transition with a non-string stack operation', () => {
+    const a = valid();
+    (a.transitions as Record<string, unknown>[])[0].push = 42;
+    expect(isAutomaton(a)).toBe(false);
+  });
+
+  it('rejects an unknown head movement', () => {
+    const a = valid();
+    (a.transitions as Record<string, unknown>[])[0].move = 'X';
+    expect(isAutomaton(a)).toBe(false);
+  });
+
+  it('rejects a start state id that does not exist', () => {
+    expect(isAutomaton({ ...valid(), startStateId: 'q9' })).toBe(false);
+  });
+
+  it('rejects alphabets with non-string symbols', () => {
+    expect(isAutomaton({ ...valid(), alphabet: ['a', 1] })).toBe(false);
+    expect(isAutomaton({ ...valid(), stackAlphabet: [null] })).toBe(false);
+  });
+});

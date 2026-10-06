@@ -10,24 +10,25 @@ export interface PersistedWorkspace {
   activeId: string;
 }
 
-function isPersistedWorkspace(value: unknown): value is PersistedWorkspace {
-  if (typeof value !== 'object' || value === null) return false;
+/**
+ * Drops individual corrupted automatons instead of rejecting the whole
+ * workspace, so one bad tab doesn't take the user's other work with it.
+ */
+function parseWorkspace(value: unknown): PersistedWorkspace | null {
+  if (typeof value !== 'object' || value === null) return null;
   const v = value as Record<string, unknown>;
-  return (
-    v.schemaVersion === 1 &&
-    Array.isArray(v.automatons) &&
-    v.automatons.length > 0 &&
-    v.automatons.every(isAutomaton) &&
-    typeof v.activeId === 'string'
-  );
+  if (v.schemaVersion !== 1 || !Array.isArray(v.automatons) || typeof v.activeId !== 'string') return null;
+  const automatons = v.automatons.filter(isAutomaton);
+  if (automatons.length === 0) return null;
+  return { schemaVersion: 1, automatons, activeId: v.activeId };
 }
 
 export function loadWorkspace(): PersistedWorkspace | null {
   try {
     const raw = localStorage.getItem(WORKSPACE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw);
-      if (isPersistedWorkspace(parsed)) return parsed;
+      const workspace = parseWorkspace(JSON.parse(raw));
+      if (workspace) return workspace;
     }
   } catch {
     // fall through to legacy migration below

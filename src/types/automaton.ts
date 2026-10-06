@@ -99,16 +99,71 @@ export function formatTransitionLabels(kind: AutomatonKind, transitions: Transit
   return transitions.map((t) => formatTransitionLabel(kind, t)).join(separator);
 }
 
-export function isAutomaton(value: unknown): value is Automaton {
-  if (typeof value !== 'object' || value === null) return false;
-  const v = value as Record<string, unknown>;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string';
+}
+
+function isState(value: unknown): value is AutomatonState {
+  if (!isRecord(value) || !isRecord(value.position)) return false;
   return (
-    v.schemaVersion === 1 &&
-    typeof v.id === 'string' &&
-    typeof v.name === 'string' &&
-    (v.kind === 'DFA' || v.kind === 'NFA' || v.kind === 'PDA' || v.kind === '2PDA' || v.kind === 'TM') &&
-    Array.isArray(v.alphabet) &&
-    Array.isArray(v.states) &&
-    Array.isArray(v.transitions)
+    typeof value.id === 'string' &&
+    typeof value.label === 'string' &&
+    Number.isFinite(value.position.x) &&
+    Number.isFinite(value.position.y) &&
+    typeof value.isStart === 'boolean' &&
+    typeof value.isAccept === 'boolean'
   );
+}
+
+function isTransition(value: unknown, stateIds: Set<string>): value is Transition {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.id === 'string' &&
+    typeof value.from === 'string' &&
+    typeof value.to === 'string' &&
+    stateIds.has(value.from) &&
+    stateIds.has(value.to) &&
+    typeof value.input === 'string' &&
+    isOptionalString(value.pop) &&
+    isOptionalString(value.push) &&
+    isOptionalString(value.pop2) &&
+    isOptionalString(value.push2) &&
+    isOptionalString(value.write) &&
+    (value.move === undefined || value.move === 'L' || value.move === 'R' || value.move === 'S')
+  );
+}
+
+/**
+ * Validates the whole structure, not just the top level: imported files and
+ * the persisted workspace are untrusted, and a malformed state or dangling
+ * transition would otherwise crash rendering on every reload.
+ */
+export function isAutomaton(value: unknown): value is Automaton {
+  if (!isRecord(value)) return false;
+  if (
+    value.schemaVersion !== 1 ||
+    typeof value.id !== 'string' ||
+    typeof value.name !== 'string' ||
+    !(value.kind === 'DFA' || value.kind === 'NFA' || value.kind === 'PDA' || value.kind === '2PDA' || value.kind === 'TM') ||
+    !isStringArray(value.alphabet) ||
+    (value.stackAlphabet !== undefined && !isStringArray(value.stackAlphabet)) ||
+    (value.tapeAlphabet !== undefined && !isStringArray(value.tapeAlphabet)) ||
+    !Array.isArray(value.states) ||
+    !Array.isArray(value.transitions) ||
+    !value.states.every(isState)
+  ) {
+    return false;
+  }
+  const stateIds = new Set(value.states.map((s) => s.id));
+  if (stateIds.size !== value.states.length) return false;
+  if (value.startStateId !== null && !(typeof value.startStateId === 'string' && stateIds.has(value.startStateId))) return false;
+  return value.transitions.every((t) => isTransition(t, stateIds));
 }
