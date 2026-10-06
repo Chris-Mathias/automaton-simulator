@@ -8,6 +8,15 @@ importers:
 
   .:
     dependencies:
+      '@fontsource/ibm-plex-sans':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/jetbrains-mono':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/material-symbols-outlined':
+        specifier: ^5.3.8
+        version: 5.3.8
       '@xyflow/react':
         specifier: ^12.11.3
         version: 12.11.5(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -131,6 +140,15 @@ packages:
     peerDependenciesMeta:
       '@noble/hashes':
         optional: true
+
+  '@fontsource/ibm-plex-sans@5.3.0':
+    resolution: {integrity: sha512-CbE4CbbEEZJX860XyUiRpsksXIQR8Rp2XDva2VO53NJox9tVNtusrysd2x5YkUEY3ErQ66W1IiiQL8/wihhw5w==}
+
+  '@fontsource/jetbrains-mono@5.3.0':
+    resolution: {integrity: sha512-fqDfB5I9f1p1TV486aUgB9t8zP84P0O1FtQR5Ol9vjwPy+S+EIGlVYm1cvj2W5shcZMTg2nZFdVMoH5wFu8a1A==}
+
+  '@fontsource/material-symbols-outlined@5.3.8':
+    resolution: {integrity: sha512-HpYZX5B3zfy70PX4xYYaGI9CCDRCjJcMumcshJDZbG3vtQBQPrBi7QIqaduCjDryo9Z8jNQFjj4378MMAWCkWw==}
 
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
@@ -1116,6 +1134,12 @@ snapshots:
   '@csstools/css-tokenizer@4.0.0': {}
 
   '@exodus/bytes@1.15.1': {}
+
+  '@fontsource/ibm-plex-sans@5.3.0': {}
+
+  '@fontsource/jetbrains-mono@5.3.0': {}
+
+  '@fontsource/material-symbols-outlined@5.3.8': {}
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
 

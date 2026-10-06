@@ -12,6 +12,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-sans": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/material-symbols-outlined": "^5.3.8",
     "@xyflow/react": "^12.11.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
